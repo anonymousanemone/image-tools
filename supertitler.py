@@ -7,6 +7,12 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_ANCHOR
 import sys
 
+# ==========================
+# INPUT VALUES
+# ==========================
+INPUT_DOC = None    # .docx
+OUTPUT_PPT = None   # .pptx
+
 def read_docx(file_path):
     """Reads a .docx file line by line, preserving formatting."""
     doc = Document(file_path)
@@ -54,8 +60,5 @@ def create_pptx(docx_lines, output_pptx):
     print(f"Created PowerPoint saved as {output_pptx}")
 
 if __name__ == "__main__":
-    docx_file = "/Users/sophial/Downloads/BCAD2025_Supertitles_File.docx"
-    output_pptx = "/Users/sophial/Downloads/bcad2025_supertitles.pptx"
-    
-    docx_lines = read_docx(docx_file)
-    create_pptx(docx_lines, output_pptx)
+    docx_lines = read_docx(INPUT_DOC)
+    create_pptx(docx_lines, OUTPUT_PPT)
