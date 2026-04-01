@@ -3,6 +3,7 @@ Combines two pdfs horizontally side by side for each page.
 """
 
 import sys
+import argparse
 from pathlib import Path
 from pypdf import PdfReader, PdfWriter, PageObject
 import os
@@ -13,32 +14,55 @@ import subprocess
 # INPUT VALUES
 # ==========================
 # 1 is on the left, 2 is on the right
-HARDCODED_PDF_1 = "/Users/sophial/Downloads/Readings-thesis/carthage/Delattre-LESCIMETIRESROMAINS-1898 en-US.pdf"
-HARDCODED_PDF_2 = "/Users/sophial/Downloads/Readings-thesis/carthage/Delattre-LESCIMETIRESROMAINS-1898.pdf"
+HARDCODED_PDF_1 = "/Users/sophial/Downloads/Readings-thesis/zoubiri_proklos_harpokrationEG_2012-01 copy.pdf"
+HARDCODED_PDF_2 = "/Users/sophial/Downloads/Readings-thesis/zoubiri_proklos_harpokrationEG_2012-01.pdf"
 HARDCODED_RESULT_DIR = None
 
 
 def parse_args():
-    pdf1 = HARDCODED_PDF_1
-    pdf2 = HARDCODED_PDF_2
-    result_dir = HARDCODED_RESULT_DIR
-
-    if not pdf1 or not pdf2:
-        print("Error: Two PDF files must be provided.")
-        sys.exit(1)
-
-    pdf1_path = Path(pdf1).resolve()
-    pdf2_path = Path(pdf2).resolve()
-
-    if not pdf1_path.exists() or not pdf2_path.exists():
-        print("Error: One or both PDF files do not exist.")
-        sys.exit(1)
-
-    result_dir_path = (
-        Path(result_dir).resolve() if result_dir else pdf1_path.parent
+    parser = argparse.ArgumentParser(
+        description="Combine two PDFs side by side (page by page)."
     )
 
-    return pdf1_path, pdf2_path, result_dir_path
+    parser.add_argument(
+        "pdf1",
+        nargs="?",
+        default=HARDCODED_PDF_1,
+        help="Left-side PDF (default: hardcoded path)",
+    )
+    parser.add_argument(
+        "pdf2",
+        nargs="?",
+        default=HARDCODED_PDF_2,
+        help="Right-side PDF (default: hardcoded path)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        default=HARDCODED_RESULT_DIR,
+        help="Output directory (default: directory of pdf1)",
+    )
+
+    args = parser.parse_args()
+
+    if not args.pdf1 or not args.pdf2:
+        parser.error("Two PDF files must be provided (or hardcoded defaults must exist).")
+
+    pdf1_path = Path(args.pdf1).expanduser().resolve()
+    pdf2_path = Path(args.pdf2).expanduser().resolve()
+
+    if not pdf1_path.exists():
+        parser.error(f"PDF not found: {pdf1_path}")
+    if not pdf2_path.exists():
+        parser.error(f"PDF not found: {pdf2_path}")
+
+    result_dir = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else pdf1_path.parent
+    )
+
+    return pdf1_path, pdf2_path, result_dir
 
 
 def combine_pdfs_side_by_side(
@@ -118,14 +142,14 @@ if __name__ == "__main__":
         pdf1_path, pdf2_path, preview_path, preview_only=True
     )
 
-    print("Opening preview in your default PDF viewer...")
-    open_pdf_preview(preview_path)
+    # print("Opening preview in your default PDF viewer...")
+    # open_pdf_preview(preview_path)
 
-    confirm = input("Continue and generate full PDF? [y/N]: ").strip().lower()
+    # confirm = input("Continue and generate full PDF? [y/N]: ").strip().lower()
 
-    if confirm != "y":
-        print("Aborted by user.")
-        sys.exit(0)
+    # if confirm != "y":
+    #     print("Aborted by user.")
+    #     sys.exit(0)
 
     print("Generating full combined PDF...")
     combine_pdfs_side_by_side(
