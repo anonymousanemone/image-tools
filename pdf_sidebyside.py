@@ -14,8 +14,8 @@ import subprocess
 # INPUT VALUES
 # ==========================
 # 1 is on the left, 2 is on the right
-HARDCODED_PDF_1 = "/Users/sophial/Downloads/Readings-thesis/zoubiri_proklos_harpokrationEG_2012-01 copy.pdf"
-HARDCODED_PDF_2 = "/Users/sophial/Downloads/Readings-thesis/zoubiri_proklos_harpokrationEG_2012-01.pdf"
+HARDCODED_PDF_1 = "/Users/sophial/Downloads/Readings-thesis/old french reports/sav1903_cagnat en-US.pdf"
+HARDCODED_PDF_2 = "/Users/sophial/Downloads/Readings-thesis/old french reports/sav1903_cagnat.pdf"
 HARDCODED_RESULT_DIR = None
 
 
@@ -137,11 +137,10 @@ if __name__ == "__main__":
     preview_path = result_dir / preview_name
 
     print(f"Result dir: {result_dir}")
-    print("Generating preview (first page only)...")
-    combine_pdfs_side_by_side(
-        pdf1_path, pdf2_path, preview_path, preview_only=True
-    )
-
+    # print("Generating preview (first page only)...")
+    # combine_pdfs_side_by_side(
+    #     pdf1_path, pdf2_path, preview_path, preview_only=True
+    # )
     # print("Opening preview in your default PDF viewer...")
     # open_pdf_preview(preview_path)
 

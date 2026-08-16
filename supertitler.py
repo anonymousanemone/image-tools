@@ -6,11 +6,12 @@ from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_ANCHOR
 import sys
+import os
 
 # ==========================
 # INPUT VALUES
 # ==========================
-INPUT_DOC = None    # .docx
+INPUT_DOC = "/Users/sophial/Downloads/Orestes_Supertitles_V5.docx"    # .docx
 OUTPUT_PPT = None   # .pptx
 
 def read_docx(file_path):
@@ -28,8 +29,8 @@ def read_docx(file_path):
 def create_pptx(docx_lines, output_pptx):
     """Creates a new PowerPoint file with slides containing text from the .docx file."""
     prs = Presentation()
-    prs.slide_width = Pt(1920)
-    prs.slide_height = Pt(360)
+    prs.slide_width = Pt(1800)
+    prs.slide_height = Pt(730)
     
     for line in docx_lines:
         slide = prs.slides.add_slide(prs.slide_layouts[6])  # Use a blank slide layout
@@ -37,10 +38,10 @@ def create_pptx(docx_lines, output_pptx):
         slide.background.fill.fore_color.rgb = RGBColor(0, 0, 0)  # Set black background
         
         # Create a new text box
-        left = Pt(20)
-        top = Pt(20)
-        width = Pt(1880)
-        height = Pt(320)
+        left = Pt(225)
+        top = Pt(40)
+        width = Pt(1350)
+        height = Pt(650)
         textbox = slide.shapes.add_textbox(left, top, width, height)
         text_frame = textbox.text_frame
         text_frame.word_wrap = True  # Enable text wrapping
@@ -61,4 +62,6 @@ def create_pptx(docx_lines, output_pptx):
 
 if __name__ == "__main__":
     docx_lines = read_docx(INPUT_DOC)
+    if (OUTPUT_PPT == None):
+        OUTPUT_PPT = os.path.splitext(INPUT_DOC)[0] + ".pptx"
     create_pptx(docx_lines, OUTPUT_PPT)
