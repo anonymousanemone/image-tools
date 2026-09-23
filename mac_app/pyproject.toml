@@ -1,0 +1,31 @@
+[project]
+name = "image-tools-mac-app"
+version = "0.1.0"
+description = "Consolidated macOS desktop app for binarization, pixel-color remapping, and PDF tools."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "PySide6>=6.7",
+    "opencv-python>=4.10",
+    "numpy>=1.26",
+    "doxapy>=0.9.5",
+    "Pillow>=10.0",
+    "pillow-heif>=0.18",
+    "pypdf>=4.0",
+    "PyMuPDF>=1.24",
+    "pdf2image>=1.17",
+    "pyobjc-framework-Vision; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pyinstaller>=6.10",
+]
+
+[tool.setuptools]
+packages = ["core", "core.pdf", "gui", "gui.pdf_subpanels"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

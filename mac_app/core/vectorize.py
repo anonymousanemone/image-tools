@@ -1,0 +1,152 @@
+"""Bitmap -> SVG path tracing, using Inkscape's CLI (object-trace + path-
+simplify actions), ported from img_vectorize2.py's trace_batch_generic
+pipeline. Requires an Inkscape install; callers should check
+inkscape_available() and disable Vectorize UI if it's False.
+
+object-trace's positional params: scans,smooth,stack,remove_background,
+speckles,smooth_corners,optimize (Multiple-scans/grays trace mode — this is
+the mode img_vectorize2.py already uses and its DEFAULT_TRACE_PARAMS is
+reused verbatim here). path-simplify takes no CLI args; it always runs, at
+Inkscape's own configured simplification threshold — there's no potrace
+step left in this pipeline.
+"""
+
+import shutil
+import subprocess
+import tempfile
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from pathlib import Path
+
+from PIL import Image, ImageOps
+
+SVG_NS = "http://www.w3.org/2000/svg"
+
+# object-trace argument order: scans,smooth,stack,remove_background,speckles,smooth_corners,optimize
+DEFAULT_TRACE_PARAMS = "2,false,true,true,2,1,0.4"
+
+PAD_PX = 10
+
+
+@dataclass
+class VectorTrace:
+    path_d: str
+    width: int
+    height: int
+    # The exact bitmap Inkscape traced (after invert/pad preprocessing), so
+    # its pixels line up with path_d's coordinate space for preview overlays
+    # and the "toggle invisible" downloaded SVG.
+    traced_image: Image.Image
+
+
+def find_inkscape() -> str | None:
+    found = shutil.which("inkscape")
+    if found:
+        return found
+    mac_path = "/Applications/Inkscape.app/Contents/MacOS/inkscape"
+    if Path(mac_path).exists():
+        return mac_path
+    return None
+
+
+def inkscape_available() -> bool:
+    return find_inkscape() is not None
+
+
+def trace_image(
+    image: Image.Image,
+    *,
+    trace_params: str = DEFAULT_TRACE_PARAMS,
+    invert: bool = False,
+    pad_px: int = 0,
+) -> VectorTrace:
+    inkscape = find_inkscape()
+    if inkscape is None:
+        raise RuntimeError("Inkscape not found — install it and ensure it's on PATH.")
+
+    proc = image.convert("L")
+    if pad_px:
+        fill = 0 if invert else 255
+        proc = ImageOps.expand(proc, border=pad_px, fill=fill)
+    if invert:
+        proc = ImageOps.invert(proc)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        src_path = Path(tmp) / "source.png"
+        svg_path = Path(tmp) / "traced.svg"
+        proc.save(src_path)
+
+        actions = (
+            f"select-all;"
+            f"object-trace:{trace_params};"
+            f"path-simplify;"
+            f"export-filename:{svg_path};export-plain-svg;export-do;"
+            f"quit-immediate"
+        )
+        result = subprocess.run(
+            [inkscape, str(src_path), "--actions", actions, "--batch-process"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Inkscape trace failed:\n{result.stderr}")
+        if "expected argument format" in result.stderr:
+            raise RuntimeError(f"object-trace rejected params {trace_params!r}:\n{result.stderr}")
+        if not svg_path.exists():
+            raise RuntimeError(f"Inkscape did not produce an SVG:\n{result.stderr}")
+
+        path_d = _extract_path_d(svg_path)
+
+    if not path_d:
+        raise RuntimeError("Inkscape traced no paths (try lowering speckle suppression or check the source image).")
+
+    return VectorTrace(path_d=path_d, width=proc.width, height=proc.height, traced_image=proc)
+
+
+def _extract_path_d(svg_path: Path) -> str:
+    tree = ET.parse(svg_path)
+    root = tree.getroot()
+    return "".join(el.get("d", "") for el in root.iter(f"{{{SVG_NS}}}path") if el.get("d"))
+
+
+def image_to_data_uri(image: Image.Image) -> str:
+    import base64
+    import io
+
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
+
+
+def build_svg(
+    width: int,
+    height: int,
+    path_d: str,
+    *,
+    raster_image: Image.Image | None = None,
+    raster_visible: bool = True,
+    path_fill: str = "black",
+    path_opacity: float = 1.0,
+) -> str:
+    """Build a full SVG: optional embedded raster <image>, plus the traced
+    <path>. Used for both the live preview overlay and the "true" (non-
+    wrapper) SVG download — raster_visible=False embeds the raster but hides
+    it, so it stays available in the file without competing with the path.
+    """
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>\n']
+    parts.append(
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}">\n'
+    )
+    if raster_image is not None:
+        uri = image_to_data_uri(raster_image)
+        style = "" if raster_visible else ' style="display:none"'
+        parts.append(
+            f'  <image id="raster" width="{width}" height="{height}" x="0" y="0" '
+            f'href="{uri}" preserveAspectRatio="none"{style}/>\n'
+        )
+    parts.append(
+        f'  <path id="vector" d="{path_d}" fill="{path_fill}" fill-opacity="{path_opacity}" '
+        f'fill-rule="evenodd" stroke="none"/>\n'
+    )
+    parts.append("</svg>\n")
+    return "".join(parts)
