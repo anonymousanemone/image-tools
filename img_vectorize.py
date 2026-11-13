@@ -1,6 +1,7 @@
-"""Batch raster -> SVG vectorizer for any binarized image, using potracer
-(a Python binding to the potrace bitmap tracing library) directly, with a
-manual SVG path writer -- no Inkscape dependency.
+"""Batch raster -> SVG vectorizer for any binarized image, using Inkscape's
+headless CLI for bitmap tracing (potrace under the hood) plus a
+path-simplify decimation pass. Strips the embedded source raster that
+Inkscape leaves behind, so each output SVG is a clean vector-only path.
 
 Assumes a white background with dark foreground by default; pass --invert
 for source images that use the opposite convention (dark background, light
@@ -11,37 +12,43 @@ edge; the border color is chosen to match the source image's own background
 is inverted together if --invert was passed -- so tracing always sees a
 consistent white-bg/dark-fg image regardless of source convention.
 
-Default trace parameters match Inkscape's Trace Bitmap dialog defaults for
-"Brightness cutoff" mode (read from Inkscape's own dialog-trace.glade):
-threshold 0.45, speckle suppression (turdsize) 2px, corner smoothing
-(alphamax) 1.0, path optimization on with tolerance (opttolerance) 0.2.
-
 Safety valve: refuses to run on a whole directory unless --all is passed,
 since this is meant to be eyeballed on a small batch first. Use --files or
 --glob for a test run.
 
 Usage:
-    python3 img_vectorize.py --input-dir crops/ --files a.png b.png
-    python3 img_vectorize.py --input-dir crops/ --glob "cat_*.png"
-    python3 img_vectorize.py --input-dir crops/ --all --invert --pad_bg
+    python3 trace_batch_generic.py --input-dir crops/ --files a.png b.png
+    python3 trace_batch_generic.py --input-dir crops/ --glob "cat_*.png"
+    python3 trace_batch_generic.py --input-dir crops/ --all --invert --pad_bg
 """
 import argparse
 import shutil
+import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from PIL import Image, ImageOps
-from potrace import Bitmap, POTRACE_TURNPOLICY_MINORITY  # `potracer` library
+
+SVG_NS = "http://www.w3.org/2000/svg"
+ET.register_namespace("", SVG_NS)
+ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 
-# Inkscape "Trace Bitmap" > Brightness cutoff defaults (dialog-trace.glade:
-# SS_BC_T=0.45, speckles=2, smooth=1, optimize=0.20, all enabled by default)
-DEFAULT_BLACKLEVEL = 0.45
-DEFAULT_TURDSIZE = 2
-DEFAULT_ALPHAMAX = 1.0
-DEFAULT_OPTTOLERANCE = 0.2
+# object-trace argument order: scans,smooth,stack,remove_background,speckles,smooth_corners,optimize
+DEFAULT_TRACE_PARAMS = "2,false,true,true,2,1,0.4"
 
 PAD_PX = 10
+
+
+def find_inkscape() -> str:
+    found = shutil.which("inkscape")
+    if found:
+        return found
+    mac_path = "/Applications/Inkscape.app/Contents/MacOS/inkscape"
+    if Path(mac_path).exists():
+        return mac_path
+    raise RuntimeError("inkscape binary not found on PATH or at the usual macOS app location")
 
 
 def preprocess_one(src_path: Path, out_path: Path, invert: bool, pad_px: int) -> None:
@@ -56,41 +63,37 @@ def preprocess_one(src_path: Path, out_path: Path, invert: bool, pad_px: int) ->
     im.save(out_path)
 
 
-def trace_one(src_path: Path, svg_path: Path, blacklevel: float, turdsize: int,
-              alphamax: float, opttolerance: float, opticurve: bool) -> None:
-    image = Image.open(src_path)
-    bm = Bitmap(image, blacklevel=blacklevel)
-    plist = bm.trace(
-        turdsize=turdsize,
-        turnpolicy=POTRACE_TURNPOLICY_MINORITY,
-        alphamax=alphamax,
-        opticurve=opticurve,
-        opttolerance=opttolerance,
+def trace_one(inkscape: str, src_path: Path, svg_path: Path, trace_params: str) -> None:
+    actions = (
+        f"select-all;"
+        f"object-trace:{trace_params};"
+        f"path-simplify;"
+        f"export-filename:{svg_path};export-plain-svg;export-do;"
+        f"quit-immediate"
     )
-    parts = []
-    for curve in plist:
-        fs = curve.start_point
-        parts.append(f"M{fs.x},{fs.y}")
-        for segment in curve.segments:
-            if segment.is_corner:
-                a = segment.c
-                b = segment.end_point
-                parts.append(f"L{a.x},{a.y}L{b.x},{b.y}")
-            else:
-                a = segment.c1
-                b = segment.c2
-                c = segment.end_point
-                parts.append(f"C{a.x},{a.y} {b.x},{b.y} {c.x},{c.y}")
-        parts.append("z")
-    with open(svg_path, "w") as fp:
-        fp.write(
-            f'<svg version="1.1" xmlns="http://www.w3.org/2000/svg" '
-            f'xmlns:xlink="http://www.w3.org/1999/xlink" '
-            f'width="{image.width}" height="{image.height}" '
-            f'viewBox="0 0 {image.width} {image.height}">'
-        )
-        fp.write(f'<path stroke="none" fill="black" fill-rule="evenodd" d="{"".join(parts)}"/>')
-        fp.write("</svg>")
+    result = subprocess.run(
+        [inkscape, str(src_path), "--actions", actions, "--batch-process"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"inkscape failed on {src_path.name}:\n{result.stderr}")
+    if "expected argument format" in result.stderr:
+        raise RuntimeError(f"object-trace rejected params for {src_path.name}:\n{result.stderr}")
+
+
+def strip_embedded_raster(svg_path: Path) -> None:
+    """Remove the source <image> Inkscape leaves behind after tracing, so
+    only the traced <path> element(s) remain."""
+    tree = ET.parse(svg_path)
+    root = tree.getroot()
+    removed = 0
+    for parent in root.iter():
+        for image in list(parent.findall(f"{{{SVG_NS}}}image")):
+            parent.remove(image)
+            removed += 1
+    if removed == 0:
+        raise RuntimeError(f"{svg_path.name}: no embedded raster found to strip (unexpected)")
+    tree.write(svg_path, encoding="unicode", xml_declaration=True)
 
 
 def resolve_targets(args, input_dir: Path) -> list[Path]:
@@ -151,17 +154,8 @@ def main():
                          help="source images have a dark background / light foreground")
     parser.add_argument("--pad_bg", action="store_true",
                          help=f"pad {PAD_PX}px of background color on every side before tracing")
-    parser.add_argument("--blacklevel", type=float, default=DEFAULT_BLACKLEVEL,
-                         help="brightness cutoff threshold, 0-1 (potrace blacklevel)")
-    parser.add_argument("--turdsize", type=int, default=DEFAULT_TURDSIZE,
-                         help="suppress speckles smaller than this many pixels")
-    parser.add_argument("--alphamax", type=float, default=DEFAULT_ALPHAMAX,
-                         help="corner smoothing, 0 (sharp) to 1.34 (smooth)")
-    parser.add_argument("--opttolerance", type=float, default=DEFAULT_OPTTOLERANCE,
-                         help="curve optimization tolerance")
-    parser.add_argument("--no-optimize", dest="opticurve", action="store_false",
-                         help="disable curve optimization (Inkscape's 'optimize paths' checkbox)")
-    parser.set_defaults(opticurve=True)
+    parser.add_argument("--trace-params", default=DEFAULT_TRACE_PARAMS,
+                         help="object-trace args: scans,smooth,stack,remove_background,speckles,smooth_corners,optimize")
     parser.add_argument("--out", default="./trace_output", help="output directory")
     args = parser.parse_args()
 
@@ -174,6 +168,7 @@ def main():
         d.mkdir(parents=True, exist_ok=True)
 
     targets = resolve_targets(args, input_dir)
+    inkscape = find_inkscape()
 
     triples = []
     for src_path in targets:
@@ -181,8 +176,8 @@ def main():
         svg_path = svg_dir / (src_path.stem + ".svg")
         print(f"tracing {src_path.name} -> {svg_path.relative_to(out_dir.parent)}")
         preprocess_one(src_path, pre_path, args.invert, PAD_PX if args.pad_bg else 0)
-        trace_one(pre_path, svg_path, args.blacklevel, args.turdsize,
-                  args.alphamax, args.opttolerance, args.opticurve)
+        trace_one(inkscape, pre_path, svg_path, args.trace_params)
+        strip_embedded_raster(svg_path)
         shutil.copy(src_path, orig_dir / src_path.name)
         triples.append((src_path, pre_path, svg_path))
 

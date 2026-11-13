@@ -4,7 +4,7 @@ from pdf2image import convert_from_path
 def pdf_to_images(
     pdf_path,
     dpi=300,
-    jpeg_quality=95,
+    img_quality=100,
     poppler_path=None
 ):
     if not os.path.isfile(pdf_path):
@@ -36,13 +36,13 @@ def pdf_to_images(
 
         image_path = os.path.join(
             output_dir,
-            f"page_{page_num:04d}.jpeg"
+            f"page_{page_num:04d}.png"
         )
 
         pages[0].save(
             image_path,
-            "JPEG",
-            quality=jpeg_quality,
+            "png",
+            quality=img_quality,
             subsampling=0,   # critical for OCR quality
             optimize=True
         )
@@ -55,4 +55,4 @@ def pdf_to_images(
 
 # Example usage
 if __name__ == "__main__":
-    pdf_to_images("/Users/sophial/Downloads/Readings-thesis/1442307.pdf")
+    pdf_to_images("/Users/sophial/Desktop/lepsius_todtenbuch (dragged) 2.pdf")
