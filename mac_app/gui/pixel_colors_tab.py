@@ -1,4 +1,7 @@
-"""Pixel Colors & Colormap tab: exact-hex remap (Section A) + ImageMagick palette map (Section B)."""
+"""Pixel Colors & Colormap tab: exact-hex remap + ImageMagick palette map."""
+
+import tempfile
+from pathlib import Path
 
 from PIL import Image
 from PySide6.QtCore import Qt
@@ -159,20 +162,16 @@ class PixelColorsTab(QWidget):
         self.mapping_table.insertRow(row)
 
         from_item = QTableWidgetItem(from_hex)
-        # Frozen: rows come straight from the loaded image's colors, not
-        # free text, so the From cell is display-only.
+        # Display-only: rows come from the image's colors.
         from_item.setFlags(from_item.flags() & ~Qt.ItemIsEditable)
         if is_valid_hex_color(from_hex):
-            # QColor(str) expects Qt's alpha-first "#aarrggbb" for an 8-digit
-            # hex, not our "#rrggbbaa" — build it from parsed components
-            # instead of handing the string straight to the constructor.
+            # QColor(str) reads 8-digit hex as #aarrggbb, not our #rrggbbaa.
             color = QColor(*hex_to_rgba(from_hex))
             from_item.setBackground(color)
             from_item.setForeground(QColor("black" if color.lightnessF() > 0.5 else "white"))
         self.mapping_table.setItem(row, 0, from_item)
 
-        # "To" is left blank by default — an empty cell means "keep this
-        # pixel's original color" when the mapping is applied.
+        # Blank "To" keeps the original color.
         self.mapping_table.setCellWidget(row, 1, ColorPickerCell())
 
     def _apply_mapping(self) -> None:
@@ -232,9 +231,6 @@ class PixelColorsTab(QWidget):
         if not palette_path:
             QMessageBox.warning(self, "No palette", "Choose a palette image first.")
             return
-
-        import tempfile
-        from pathlib import Path
 
         with tempfile.TemporaryDirectory() as tmp:
             input_path = Path(tmp) / "input.png"

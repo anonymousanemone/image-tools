@@ -1,11 +1,10 @@
-"""Background-thread worker for long-running PDF operations, keeping the GUI thread responsive."""
+"""Thread-pool worker for long-running PDF operations."""
 
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 
 class WorkerSignals(QObject):
     progress = Signal(str)
-    finished = Signal(object)
     error = Signal(str)
 
 
@@ -21,8 +20,6 @@ class Worker(QRunnable):
     @Slot()
     def run(self) -> None:
         try:
-            result = self.fn(*self.args, **self.kwargs)
+            self.fn(*self.args, **self.kwargs)
         except Exception as e:
             self.signals.error.emit(str(e))
-            return
-        self.signals.finished.emit(result)

@@ -1,11 +1,4 @@
-"""macOS Vision-based background removal.
-
-Vendored from OstracaBinarization/src/segmentation.py (vision_available,
-segment_vision, _vision_pixel_buffer_to_mask, find_contour) — the other
-segmentation methods in that file (HSV/k-means, saturation Otsu) are
-intentionally not included; this app exposes background removal as a single
-macOS-Vision-only button.
-"""
+"""macOS Vision background removal (vendored from OstracaBinarization/src/segmentation.py)."""
 
 import cv2
 import numpy as np
@@ -22,14 +15,8 @@ def vision_available() -> bool:
     return hasattr(Vision, "VNGenerateForegroundInstanceMaskRequest")
 
 
-def segment_vision(img: np.ndarray, debug: bool = False) -> np.ndarray:
-    """Foreground subject mask via macOS's Vision framework.
-
-    This is the same on-device model behind "Remove Background" in Preview
-    and "Lift Subject" in Photos (VNGenerateForegroundInstanceMaskRequest,
-    macOS 13+). Requires pyobjc-framework-Vision/-Quartz/-Cocoa and only
-    runs on macOS.
-    """
+def segment_vision(img: np.ndarray) -> np.ndarray:
+    """Foreground mask from macOS Vision (Preview's "Remove Background" model, macOS 13+)."""
     try:
         import Vision
         import Quartz
@@ -72,12 +59,6 @@ def segment_vision(img: np.ndarray, debug: bool = False) -> np.ndarray:
     h, w = img.shape[:2]
     mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_LINEAR)
     _, binary = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
-
-    if debug:
-        cv2.imshow("Vision foreground mask", binary)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
     return binary
 
 
@@ -101,14 +82,9 @@ def _vision_pixel_buffer_to_mask(pixel_buffer, Quartz) -> np.ndarray:
     return arr
 
 
-def find_contour(mask: np.ndarray, debug: bool = False):
-    """Keep only the largest external contour of a binary mask, filled in.
-
-    Returns (contour_line, filled_mask), both same shape as `mask`.
-    """
+def find_contour(mask: np.ndarray):
+    """Largest external contour of a binary mask, as (outline, filled_mask)."""
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if debug:
-        print(f"  Found {len(contours)} contour(s)")
     assert len(contours) > 0, "No contours found — boundary detection failed."
 
     largest_contour = max(contours, key=cv2.contourArea)
@@ -117,25 +93,11 @@ def find_contour(mask: np.ndarray, debug: bool = False):
 
     contour_line = np.zeros_like(mask)
     cv2.drawContours(contour_line, [largest_contour], -1, 255, thickness=2)
-
-    if debug:
-        if len(mask.shape) == 2:
-            outline = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-        else:
-            outline = mask.copy()
-        cv2.drawContours(outline, [largest_contour], -1, (0, 0, 255), 2)
-        cv2.imshow("Original", mask)
-        cv2.imshow("Boundary mask (raw)", mask)
-        cv2.imshow("Largest Contour Filled Mask", filled_mask)
-        cv2.imshow("Largest Contour Outlined", outline)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
     return contour_line, filled_mask
 
 
 def remove_background(img: np.ndarray) -> np.ndarray:
-    """One-button remove background: Vision mask -> largest-contour cleanup -> RGBA cutout."""
+    """Vision mask -> largest-contour cleanup -> RGBA cutout."""
     mask = segment_vision(img)
     _, filled_mask = find_contour(mask)
 

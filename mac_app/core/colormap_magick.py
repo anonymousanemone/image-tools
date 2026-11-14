@@ -1,11 +1,6 @@
-"""Photographic palette mapping, ported from colormap.R (R magick::image_map).
+"""Palette mapping via ImageMagick 7's `magick -remap` (port of colormap.R's image_map).
 
-Shells out to ImageMagick's `magick` CLI rather than reimplementing
-nearest-color matching in Python. `magick <input> -remap <palette> <output>`
-maps every pixel to the nearest color in the palette image without dithering
-by default, matching R magick's `image_map(dither = FALSE)` default.
-Requires ImageMagick 7+ (the unified `magick` binary — a legacy
-convert/mogrify-only install won't work).
+Maps each pixel to the nearest palette-image color, undithered by default.
 """
 
 import subprocess

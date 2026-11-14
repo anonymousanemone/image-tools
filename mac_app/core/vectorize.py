@@ -1,16 +1,10 @@
-"""Bitmap -> SVG path tracing, using Inkscape's CLI (object-trace + path-
-simplify actions), ported from img_vectorize2.py's trace_batch_generic
-pipeline. Requires an Inkscape install; callers should check
-inkscape_available() and disable Vectorize UI if it's False.
+"""Bitmap -> SVG path tracing via Inkscape's CLI (object-trace, then path-simplify).
 
-object-trace's positional params: scans,smooth,stack,remove_background,
-speckles,smooth_corners,optimize (Multiple-scans/grays trace mode — this is
-the mode img_vectorize2.py already uses and its DEFAULT_TRACE_PARAMS is
-reused verbatim here). path-simplify takes no CLI args; it always runs, at
-Inkscape's own configured simplification threshold — there's no potrace
-step left in this pipeline.
+Port of img_vectorize2.py. Callers check inkscape_available() first.
 """
 
+import base64
+import io
 import shutil
 import subprocess
 import tempfile
@@ -33,9 +27,7 @@ class VectorTrace:
     path_d: str
     width: int
     height: int
-    # The exact bitmap Inkscape traced (after invert/pad preprocessing), so
-    # its pixels line up with path_d's coordinate space for preview overlays
-    # and the "toggle invisible" downloaded SVG.
+    # The exact (inverted/padded) bitmap traced, aligned with path_d's coordinates.
     traced_image: Image.Image
 
 
@@ -109,9 +101,6 @@ def _extract_path_d(svg_path: Path) -> str:
 
 
 def image_to_data_uri(image: Image.Image) -> str:
-    import base64
-    import io
-
     buf = io.BytesIO()
     image.save(buf, format="PNG")
     return f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
@@ -127,10 +116,9 @@ def build_svg(
     path_fill: str = "black",
     path_opacity: float = 1.0,
 ) -> str:
-    """Build a full SVG: optional embedded raster <image>, plus the traced
-    <path>. Used for both the live preview overlay and the "true" (non-
-    wrapper) SVG download — raster_visible=False embeds the raster but hides
-    it, so it stays available in the file without competing with the path.
+    """SVG of the traced <path> over an optional embedded raster.
+
+    `raster_visible=False` keeps the raster in the file but hidden.
     """
     parts = ['<?xml version="1.0" encoding="UTF-8"?>\n']
     parts.append(

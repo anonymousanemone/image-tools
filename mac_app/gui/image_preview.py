@@ -1,10 +1,7 @@
-"""Scrollable image preview bound to an ImageState: fits to window by default, zoomable.
+"""Zoomable, pannable preview of an ImageState (fit to window by default).
 
-Trackpad pinch-to-zoom and Ctrl+scroll-wheel zoom are handled via an event
-filter installed on the scroll area's viewport and the image label — a
-wheelEvent/event() override on this outer widget would never actually fire,
-since the QScrollArea child covers the whole area and receives those events
-first.
+Zoom/pan input is handled by an event filter on the scroll viewport and label,
+since they receive those events before this widget does.
 """
 
 import subprocess
@@ -47,8 +44,7 @@ class ImagePreviewWidget(QWidget):
         self.vector_state = vector_state
         self._preview_tmp_dir: Path | None = None
         self.image_state.image_changed.connect(self.refresh)
-        # Pixel art needs nearest-neighbor scaling (crisp square pixels) rather
-        # than the smooth/blurred interpolation used for photographic content.
+        # Nearest-neighbor keeps pixel art crisp.
         self._transform_mode = Qt.FastTransformation if pixel_perfect else Qt.SmoothTransformation
 
         self._pixmap: QPixmap | None = None
@@ -85,18 +81,12 @@ class ImagePreviewWidget(QWidget):
         self._label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
 
         self._scroll = QScrollArea()
-        # widgetResizable=True would make the scroll area keep forcing the
-        # label back down to viewport size on every layout pass, silently
-        # discarding the larger pixmap set when zoomed in — leaving nothing
-        # to actually scroll/pan through. We size the label ourselves in
-        # _rescale() instead, so the scroll area can tell when it's bigger
-        # than the viewport and enable panning.
+        # _rescale() sizes the label itself so a zoomed image can exceed the
+        # viewport and pan; widgetResizable would shrink it back.
         self._scroll.setWidgetResizable(False)
         self._scroll.setAlignment(Qt.AlignCenter)
         self._scroll.setWidget(self._label)
 
-        # Wheel/gesture/mouse events over the image go to the viewport or
-        # the label depending on zoom state, not to this outer widget.
         self._scroll.viewport().installEventFilter(self)
         self._label.installEventFilter(self)
         self._scroll.viewport().setCursor(Qt.OpenHandCursor)
@@ -108,9 +98,7 @@ class ImagePreviewWidget(QWidget):
         layout.addWidget(self._scroll)
 
     def refresh(self) -> None:
-        # Any change to the bound raster (binarize, filter, undo, open a new
-        # image) invalidates whatever vector overlay was being shown, since
-        # it was traced from a now-superseded image.
+        # A raster change supersedes any vector overlay.
         self._override_pixmap = None
         image = self.image_state.current_image
         if image is None:
@@ -123,16 +111,9 @@ class ImagePreviewWidget(QWidget):
         self._rescale()
 
     def show_override(self, pixmap: QPixmap) -> None:
-        """Display `pixmap` instead of the bound ImageState's current image
-        (used for the Vectorize preview), until the next refresh()."""
+        """Show `pixmap` (the Vectorize preview) instead of the image until the next refresh()."""
         self._override_pixmap = pixmap
         self._label.setText("")
-        self._rescale()
-
-    def clear_override(self) -> None:
-        if self._override_pixmap is None:
-            return
-        self._override_pixmap = None
         self._rescale()
 
     def _rescale(self) -> None:
@@ -174,23 +155,20 @@ class ImagePreviewWidget(QWidget):
         self._rescale()
 
     def eventFilter(self, obj, event) -> bool:
-        # Trackpad pinch gesture (macOS delivers this as a native gesture,
-        # not a QPinchGesture — no grabGesture() call needed).
+        # Trackpad pinch (a macOS native gesture, no grabGesture() needed).
         if event.type() == QEvent.NativeGesture and event.gestureType() == Qt.ZoomNativeGesture:
             self._fit_to_window = False
             self._zoom = max(ZOOM_MIN, min(ZOOM_MAX, self._zoom * (1.0 + event.value())))
             self._rescale()
             return True
-        # Ctrl+scroll-wheel zoom (a plain two-finger scroll is left alone so
-        # QScrollArea can pan normally when the image is zoomed in).
+        # Ctrl+wheel zooms; plain scrolling still pans.
         if event.type() == QEvent.Wheel and event.modifiers() & Qt.ControlModifier:
             if event.angleDelta().y() > 0:
                 self.zoom_in()
             else:
                 self.zoom_out()
             return True
-        # Click-and-drag panning: QScrollArea has no built-in drag-to-pan, so
-        # track the drag manually and push it into the scrollbars.
+        # Drag to pan (QScrollArea has none built in).
         if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
             self._panning = True
             self._pan_start_global = event.globalPosition()
@@ -213,18 +191,13 @@ class ImagePreviewWidget(QWidget):
         return super().eventFilter(obj, event)
 
     def _preview_tmp_path(self, suffix: str) -> Path:
-        # A fixed filename that's overwritten on every open, rather than a
-        # fresh one each time — keeps this from littering the temp dir, and
-        # a TemporaryDirectory context manager can't be used here since
-        # Preview/Inkscape read the file after this call returns.
+        # One reused file per suffix; it must outlive this call for Preview/Inkscape.
         if self._preview_tmp_dir is None:
             self._preview_tmp_dir = Path(tempfile.mkdtemp(prefix="image_tools_preview_"))
         return self._preview_tmp_dir / f"preview{suffix}"
 
     def open_in_native_preview(self) -> None:
-        """Open the current image at full resolution in a native app: macOS
-        Preview for raster content, or Inkscape when a vector trace is
-        showing — Preview can't render arbitrary SVG path data reliably."""
+        """Open full-size in Preview, or in Inkscape when a vector trace exists."""
         trace = self.vector_state.trace if self.vector_state is not None else None
         if trace is not None:
             self._open_svg_in_inkscape(trace)

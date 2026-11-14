@@ -1,11 +1,4 @@
-"""SVG export, ported from img_binarizer.ipynb's png_to_svg().
-
-Wraps a base64-encoded PNG in a minimal SVG <image> tag (raster embedded in
-an SVG wrapper, not true vector tracing) — matches the notebook's approach.
-Uses cv2.imencode instead of the notebook's skimage.io.imsave so the app
-doesn't need scikit-image (and its scipy/tifffile/imageio dependency chain)
-just for this one call.
-"""
+"""SVG wrapper export: the raster embedded as a base64 PNG <image> (no tracing)."""
 
 import base64
 from pathlib import Path

@@ -1,18 +1,9 @@
-"""Pixel-exact color inspection and remapping, ported from img_pixel_colors.ipynb.
-
-apply_color_mapping is rewritten as vectorized numpy — the original iterated
-every pixel in pure Python (O(width*height) Python-level work), which is only
-practical on pixel-art-scale images. get_colors/hex_to_rgb are reused as-is.
-"""
-
-from pathlib import Path
+"""Exact-color inspection and remapping (vectorized port of img_pixel_colors.ipynb)."""
 
 import numpy as np
 from PIL import Image
 
-# get_colors(maxcolors=1_000_000) is tuned for pixel-art-scale palettes; a
-# photo can return hundreds of thousands of distinct colors, which is not
-# useful to render as a swatch strip. Callers should warn/cap above this.
+# Callers warn and cap the color list above this (photos can have 100k+ colors).
 LARGE_PALETTE_WARNING_THRESHOLD = 256
 
 
@@ -21,8 +12,7 @@ def rgb_to_hex(color: tuple[int, int, int]) -> str:
 
 
 def rgba_to_hex(color: tuple[int, int, int, int]) -> str:
-    """6-digit hex for an opaque color, 8-digit #rrggbbaa when it has alpha —
-    matches hex_to_rgba's own format so it round-trips."""
+    """#rrggbb when opaque, else #rrggbbaa (round-trips with hex_to_rgba)."""
     r, g, b, a = color
     if a == 255:
         return rgb_to_hex((r, g, b))
@@ -35,9 +25,7 @@ def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
 
 
 def hex_to_rgba(hex_color: str) -> tuple[int, int, int, int]:
-    """Parses a 6-digit (#rrggbb, alpha defaults to opaque) or 8-digit
-    (#rrggbbaa) hex color, for replacement colors that carry an explicit
-    alpha value."""
+    """Parse #rrggbb (alpha 255) or #rrggbbaa."""
     stripped = hex_color.strip().lstrip("#")
     if len(stripped) == 6:
         r, g, b = (int(stripped[i:i + 2], 16) for i in (0, 2, 4))
@@ -56,17 +44,10 @@ def is_valid_hex_color(hex_color: str) -> bool:
         return False
 
 
-def get_colors(image_path) -> list[str]:
-    image = Image.open(image_path).convert("RGB")
-    return get_colors_from_image(image)
-
-
 def get_colors_from_image(image: Image.Image) -> list[str]:
-    """Distinct hex colors in an in-memory image, most-frequent first.
+    """Distinct hex colors, most frequent first.
 
-    RGBA images are grouped by (r, g, b, a) rather than flattened to RGB, so
-    e.g. a transparent background comes back as its own #rrggbbaa entry
-    instead of being merged into whatever opaque pixels share its RGB.
+    RGBA keeps alpha, so e.g. a transparent background is its own #rrggbbaa entry.
     """
     if image.mode == "RGBA":
         colors = image.getcolors(maxcolors=1_000_000)
@@ -79,15 +60,10 @@ def get_colors_from_image(image: Image.Image) -> list[str]:
 
 
 def apply_color_mapping(image: Image.Image, color_map: dict[str, str]) -> Image.Image:
-    """Replace exact-hex-match pixels per color_map. Vectorized (see module docstring).
+    """Replace pixels exactly matching each "from" hex with its "to" hex.
 
-    On an RGBA image, a "from" value is matched on its full (r, g, b, a) —
-    an 8-digit #rrggbbaa "from" only matches that exact transparency, and a
-    plain 6-digit "from" only matches fully-opaque pixels of that color,
-    consistent with the alpha-aware colors get_colors_from_image() loads.
-    A "to" value may be an 8-digit #rrggbbaa hex to also overwrite the alpha
-    channel of matched pixels; a plain 6-digit hex leaves the existing alpha
-    of matched pixels untouched.
+    On RGBA, "from" matches full RGBA (a 6-digit hex matches opaque pixels only).
+    An 8-digit "to" also sets alpha; a 6-digit one keeps it.
     """
     has_alpha = image.mode == "RGBA"
     working = image.convert("RGBA" if has_alpha else "RGB")
@@ -106,10 +82,3 @@ def apply_color_mapping(image: Image.Image, color_map: dict[str, str]) -> Image.
             arr[..., 3][mask] = to_a
 
     return Image.fromarray(arr, mode=working.mode)
-
-
-def apply_color_mapping_file(image_path, color_map: dict[str, str], output_path) -> None:
-    """File-path wrapper, kept for parity testing against the original notebook loop."""
-    image = Image.open(image_path)
-    result = apply_color_mapping(image, color_map)
-    result.save(Path(output_path))

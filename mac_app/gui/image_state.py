@@ -1,5 +1,4 @@
-"""Per-tab working-image state: original (unedited) image, current working image,
-linear undo stack, change signal."""
+"""Per-tab image state: original, current image, undo stack, change signal."""
 
 from PIL import Image
 from PySide6.QtCore import QObject, Signal
@@ -23,7 +22,7 @@ class ImageState(QObject):
 
     @property
     def original_image(self) -> Image.Image | None:
-        """The unedited image as loaded, unaffected by any filters/edits since."""
+        """The image as loaded, before any edits."""
         return self._original
 
     def load(self, image: Image.Image, source_path: str | None = None) -> None:
@@ -41,7 +40,7 @@ class ImageState(QObject):
         self.image_changed.emit()
 
     def reset_to_original(self) -> None:
-        """Discard the current working image (and undo history), reverting to the unedited original."""
+        """Revert to the original, clearing undo history."""
         if self._original is None:
             return
         self._current = self._original.copy()
@@ -55,14 +54,9 @@ class ImageState(QObject):
         self.image_changed.emit()
         return True
 
-    def has_alpha(self) -> bool:
-        return self._current is not None and self._current.mode == "RGBA"
-
 
 class VectorState:
-    """Holds the most recent Vectorize result for a tab, if any. Plain
-    (non-Qt-signal) holder: the trace is read on demand (preview refresh,
-    download) rather than reacted to."""
+    """A tab's latest Vectorize result; read on demand, so no signal."""
 
     def __init__(self):
         self.trace: VectorTrace | None = None

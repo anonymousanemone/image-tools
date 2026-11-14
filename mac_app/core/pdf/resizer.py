@@ -1,8 +1,6 @@
-"""Scale every page in a PDF to match one reference page's width, ported from pdf_resizer.py.
+"""Scale every PDF page to one reference page's width (port of pdf_resizer.py).
 
-Signature fixed: input_path was hardcoded inside the function body in the
-original; it's now a required parameter, with output_path optional
-(defaulting to the original's `<stem>-resized<ext>` auto-naming).
+`output_path` defaults to `<stem>-resized<ext>`.
 """
 
 import os

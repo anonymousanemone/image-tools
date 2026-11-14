@@ -1,13 +1,12 @@
-"""Discrete, combinable image filters for the Binarizer tab's filter toolbox.
+"""Thin cv2 filters for the Binarizer tab's toolbox, each applied on its own.
 
-These are new thin cv2 wrappers (no 1:1 notebook source) exposed as
-individually-clickable buttons rather than a fixed automatic pipeline.
-Default parameter values borrow from OstracaBinarization/src/processing.py's
-run_binarize()/DEFAULT_OPTIONS as sane starting points.
+Defaults borrow from OstracaBinarization's DEFAULT_OPTIONS.
 """
 
 import cv2
 import numpy as np
+
+from .segment import find_contour
 
 
 def bilateral_filter(img: np.ndarray, d: int = 5, sigma_color: float = 50, sigma_space: float = 20) -> np.ndarray:
@@ -45,9 +44,7 @@ def morph_close(img: np.ndarray, ksize: int = 10) -> np.ndarray:
 
 
 def find_contour_outline(img: np.ndarray) -> np.ndarray:
-    """Standalone 'find contour' filter button: binary/gray in, largest contour outline mask out."""
-    from .segment import find_contour
-
+    """Outline mask of the largest contour in the thresholded image."""
     if img.ndim == 3:
         gray = cv2.cvtColor(img[:, :, :3] if img.shape[2] == 4 else img, cv2.COLOR_BGR2GRAY)
     else:

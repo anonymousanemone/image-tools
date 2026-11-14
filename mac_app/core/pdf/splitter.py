@@ -1,7 +1,4 @@
-"""Split a PDF into parts under a max size, ported from pdf_splitter.py.
-
-argparse CLI dropped; split_pdf_by_size was already clean/importable.
-"""
+"""Split a PDF into parts under a max size (port of pdf_splitter.py)."""
 
 import os
 from io import BytesIO

@@ -1,12 +1,5 @@
-"""Combine two PDFs horizontally side by side per page, ported from pdf_sidebyside.py.
+"""Combine two equal-length PDFs page by page, side by side (port of pdf_sidebyside.py)."""
 
-argparse/CLI scaffolding stripped; combine_pdfs_side_by_side and
-open_pdf_preview are already clean, importable functions.
-"""
-
-import os
-import subprocess
-import sys
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -17,7 +10,6 @@ def combine_pdfs_side_by_side(
     pdf1_path: Path,
     pdf2_path: Path,
     output_path: Path,
-    preview_only: bool = False,
     on_progress: Optional[Callable[[str], None]] = None,
 ) -> None:
     def report(msg: str) -> None:
@@ -36,9 +28,8 @@ def combine_pdfs_side_by_side(
         )
 
     writer = PdfWriter()
-    page_count = 1 if preview_only else len(reader1.pages)
 
-    for i in range(page_count):
+    for i in range(pages1):
         page1 = reader1.pages[i]
         page2 = reader2.pages[i]
 
@@ -56,21 +47,8 @@ def combine_pdfs_side_by_side(
         new_page.merge_translated_page(page2, tx=width1, ty=0)
 
         writer.add_page(new_page)
-        report(f"Merged page {i + 1}/{page_count}")
+        report(f"Merged page {i + 1}/{pages1}")
 
     with open(output_path, "wb") as f:
         writer.write(f)
     report(f"Done. Output saved to: {output_path}")
-
-
-def open_pdf_preview(path: Path) -> None:
-    """Attempt to open a PDF in the system default viewer."""
-    try:
-        if sys.platform.startswith("darwin"):
-            subprocess.run(["open", path], check=True)
-        elif os.name == "nt":
-            os.startfile(path)  # type: ignore[attr-defined]
-        else:
-            subprocess.run(["xdg-open", path], check=True)
-    except Exception:
-        print(f"Could not automatically open preview. Preview file: {Path(path).resolve()}")

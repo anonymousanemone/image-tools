@@ -1,20 +1,13 @@
-"""Replacement-color cell for the mapping table: a swatch button that opens a
-color-wheel picker (with alpha), plus a hex text field for direct entry.
-Left blank, it means "keep the original color" for that row.
+"""Mapping-table "To" cell: swatch button (color picker with alpha) + hex field.
+
+Blank means keep the original color.
 """
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QColorDialog, QHBoxLayout, QLineEdit, QPushButton, QWidget
 
-from core.pixel_colors import hex_to_rgba, is_valid_hex_color
-
-
-def color_to_hex(color: QColor) -> str:
-    """6-digit hex for an opaque color, 8-digit #rrggbbaa when it has alpha."""
-    if color.alpha() == 255:
-        return "#%02x%02x%02x" % (color.red(), color.green(), color.blue())
-    return "#%02x%02x%02x%02x" % (color.red(), color.green(), color.blue(), color.alpha())
+from core.pixel_colors import hex_to_rgba, is_valid_hex_color, rgba_to_hex
 
 
 class ColorPickerCell(QWidget):
@@ -45,7 +38,7 @@ class ColorPickerCell(QWidget):
             initial, self, "Pick replacement color", QColorDialog.ShowAlphaChannel
         )
         if color.isValid():
-            self.hex_edit.setText(color_to_hex(color))
+            self.hex_edit.setText(rgba_to_hex(color.getRgb()))
 
     def _on_text_changed(self, _text: str) -> None:
         self._update_swatch()

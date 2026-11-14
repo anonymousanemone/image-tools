@@ -1,14 +1,11 @@
-"""Make near-white pixels transparent, reused as-is from img_transparent_bg.py."""
+"""Make near-white pixels transparent (from img_transparent_bg.py)."""
 
 import numpy as np
 from PIL import Image
 
 
 def make_white_transparent(img: Image.Image, threshold: int = 250) -> Image.Image:
-    """Convert white (or near-white) pixels to transparent.
-
-    threshold: 0-255 (higher = stricter white detection)
-    """
+    """Clear pixels whose R, G and B are all >= `threshold`; make the rest opaque."""
     img = img.convert("RGBA")
     data = np.array(img)
 

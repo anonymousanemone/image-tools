@@ -1,8 +1,4 @@
-"""Strip the text layer from a PDF (rasterize each page), ported from pdf_flatten.py.
-
-The original ran strip_text_layer() unconditionally at module scope with a
-hardcoded path on import — that trailing call is removed here.
-"""
+"""Strip a PDF's text layer by rasterizing every page (port of pdf_flatten.py)."""
 
 import io
 import os

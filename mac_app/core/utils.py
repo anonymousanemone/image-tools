@@ -10,10 +10,7 @@ from PySide6.QtCore import QByteArray, Qt
 from PySide6.QtGui import QImage, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
-# Homebrew installs binaries here on Apple Silicon / Intel respectively. A
-# .app launched from Finder doesn't inherit the Terminal shell's PATH, so
-# shutil.which() alone can miss a tool that's on PATH for every interactive
-# shell the user has ever opened.
+# Homebrew bin dirs (Apple Silicon, Intel): a Finder-launched .app lacks the shell's PATH.
 _EXTRA_BIN_DIRS = ["/opt/homebrew/bin", "/usr/local/bin"]
 
 
@@ -52,9 +49,7 @@ def pil_to_qpixmap(image: Image.Image) -> QPixmap:
         image = image.convert("RGBA")
     data = image.tobytes("raw", image.mode)
     fmt = QImage.Format_RGBA8888 if image.mode == "RGBA" else QImage.Format_RGB888
-    # Pass bytesPerLine explicitly: QImage otherwise assumes each row is padded
-    # to a 4-byte boundary, which raw RGB888 data (3 bytes/px) isn't unless the
-    # width is a multiple of 4 — rows then shear into diagonal ghost copies.
+    # Explicit bytesPerLine: RGB888 rows aren't 4-byte aligned, and assuming so shears the image.
     bytes_per_line = image.width * (4 if image.mode == "RGBA" else 3)
     qimage = QImage(data, image.width, image.height, bytes_per_line, fmt)
     return QPixmap.fromImage(qimage.copy())

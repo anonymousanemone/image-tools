@@ -1,9 +1,6 @@
-"""Binarizer tab: 12 doxapy algorithms (+ Compare All), filter toolbox, Vision background removal.
+"""Binarizer tab: binarize, enlarge, background removal, filters, vectorize.
 
-Binarize always runs on the original, unedited image (never on top of
-whatever filters happen to be currently applied) — changing the algorithm
-dropdown discards any filters applied since the last binarize, since a new
-algorithm choice means starting over from the source image.
+Binarize always runs on the original image; changing the algorithm discards edits since.
 """
 
 import numpy as np
@@ -110,9 +107,7 @@ class BinarizerTab(QWidget):
 
         controls.addWidget(bin_group)
 
-        # Enlarge — works on the current image (undoable), or, with the
-        # checkbox, on the source right before binarizing so the algorithm
-        # runs on the larger image.
+        # Enlarge the current image (undoable), or the source right before binarizing.
         enlarge_group = QGroupBox("Enlarge")
         enlarge_layout = QVBoxLayout(enlarge_group)
         enlarge_layout.setSpacing(4)
@@ -142,9 +137,7 @@ class BinarizerTab(QWidget):
 
         controls.addWidget(enlarge_group)
 
-        # Changing the algorithm cancels any filters applied on top of the
-        # previous result — connected after initial setup so it doesn't fire
-        # during construction.
+        # Connected after setup so it doesn't fire during construction.
         self.algo_combo.currentIndexChanged.connect(self._on_algo_changed)
 
         # Remove background
@@ -181,9 +174,7 @@ class BinarizerTab(QWidget):
             grid.addWidget(apply_btn, row, 2)
         controls.addWidget(filter_group)
 
-        # Vectorize — shells out to Inkscape's object-trace + path-simplify
-        # actions (ported from img_vectorize2.py), not potrace directly, so
-        # the whole panel is disabled when Inkscape isn't found.
+        # Vectorize (Inkscape trace); disabled when Inkscape isn't found.
         vec_group = QGroupBox("Vectorize (requires Inkscape)")
         vec_layout = QVBoxLayout(vec_group)
         vec_layout.setSpacing(4)
@@ -321,8 +312,7 @@ class BinarizerTab(QWidget):
         if factor == 1:
             return
         arr = pil_to_cv2(image)
-        # A pure 0/255 image (e.g. a binarize result, not an anti-aliased one)
-        # is re-thresholded after enlarging so it stays crisp black/white.
+        # Pure 0/255 images are re-thresholded so they stay crisp black/white.
         binary = bool(np.isin(arr, (0, 255)).all())
         result = enlarge_array(
             arr, factor, sharp=self.enlarge_method_combo.currentText() == ENLARGE_SHARP, binary=binary
@@ -353,16 +343,14 @@ class BinarizerTab(QWidget):
                 transparent=self.transparent_check.isChecked(),
                 antialias=self.antialias_check.isChecked(),
             )
-        # Binarize always starts from the original image — discard any
-        # filters applied since, then apply the fresh result.
+        # Replace any edits since the original with the fresh result.
         self.image_state.reset_to_original()
         self.image_state.push(cv2_to_pil(result))
         self._is_binarized = True
         self._binarize_method = algo
 
     def _compare_all(self, original: Image.Image) -> None:
-        """Show all 12 algorithms tiled in one labeled grid, directly in the
-        main preview (like the notebook's plot_all_binarize), not a popup."""
+        """Show all 12 algorithms as one labeled grid in the main preview."""
         cv_img = pil_to_cv2(original)
         grid = render_algorithm_grid(cv_img)
         self.image_state.reset_to_original()
@@ -402,8 +390,7 @@ class BinarizerTab(QWidget):
         self.image_state.push(cv2_to_pil(result))
 
     def _on_raster_changed(self) -> None:
-        """Any raster edit (binarize, filter, undo, open) invalidates the
-        current trace — it was drawn from an image that's no longer current."""
+        """Any raster edit invalidates the current trace."""
         self.vector_state.trace = None
         if self.vec_show_below_check.isChecked():
             self.vec_show_below_check.blockSignals(True)

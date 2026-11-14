@@ -1,40 +1,18 @@
-"""Image enlarging (pre- or post-binarization) and binary anti-aliasing.
+"""Image enlarging and binary anti-aliasing (OpenCV BGR(A)/grayscale arrays).
 
-Two enlarge modes, both array-in/array-out (OpenCV BGR/BGRA/grayscale):
-
-* ``sharp=False`` — plain bicubic resize (cv2.INTER_CUBIC).
-* ``sharp=True`` — made for line art / scanned documents, where the goal is a
-  bigger image whose strokes stay crisp and smooth rather than blocky or blurry:
-    1. Lanczos resize (cv2.INTER_LANCZOS4), which keeps edges steeper than
-       bicubic.
-    2. A light Gaussian blur scaled to the enlarge factor, which averages out
-       pixel-level speckle so a later threshold doesn't turn it into noise.
-    3. If the input is already binary (``binary=True``), re-threshold at 127.
-       This is the standard "upscale smoothly, then threshold again" approach:
-       the interpolation rounds off the stair-stepped edges of the small
-       image, and the threshold snaps the result back to crisp black/white.
-       When enlarging *before* binarizing, the binarization step itself plays
-       the role of that final threshold.
-
-Written from the general technique, not copied from a library. References
-consulted while designing it:
-  - OpenCV resize / interpolation flags:
-    https://docs.opencv.org/4.x/da/d54/group__imgproc__transform.html
-  - Binary Document Image Super Resolution for Improved Readability and OCR
-    Performance (bicubic upscale as the first stage, then sharpening edges):
-    https://arxiv.org/abs/1812.02475
-  - Scale2x/EPX (pixel-art upscalers) and OpenCV's dnn_superres (EDSR/ESPCN/
-    FSRCNN) were looked at and deliberately not used: the first is for pixel
-    art, the second needs downloaded model weights.
+* Simple: bicubic resize.
+* Sharp (line art): Lanczos resize, then a light blur scaled to the factor to
+  smooth stair-stepped edges, then (for binary input) a re-threshold at 127 to
+  snap back to crisp black/white. When enlarging before binarizing, the
+  binarization does that final threshold.
 """
 
 import cv2
 import numpy as np
 
-# Blur strength per unit of enlarge factor; chosen by eye on a noisy text scan —
-# higher smooths edges more but starts closing small counters/gaps.
+# Blur sigma per unit of enlarge factor (tuned by eye; higher closes small gaps).
 _SHARP_BLUR_PER_FACTOR = 0.5
-# Gaussian sigma (px) used to soften binarized edges for anti-aliasing.
+# Blur sigma (px) for anti-aliasing binarized edges.
 ANTIALIAS_SIGMA = 0.8
 
 
@@ -55,11 +33,10 @@ def _sharp_gray(gray: np.ndarray, factor: float, binary: bool) -> np.ndarray:
 def enlarge_array(
     img: np.ndarray, factor: float, sharp: bool = False, binary: bool = False
 ) -> np.ndarray:
-    """Enlarge `img` by `factor` (>1). See module docstring for the modes.
+    """Enlarge `img` by `factor` (see module docstring for the modes).
 
-    `binary=True` (only used with ``sharp``) says the input is a black/white
-    result — grayscale 0/255, or RGBA whose shape is carried by its alpha
-    channel — so the output is re-thresholded back to pure black/white.
+    With `sharp`, `binary=True` marks black/white input (grayscale 0/255, or
+    RGBA with the shape in alpha) so the output is re-thresholded.
     """
     if factor == 1:
         return img
@@ -80,6 +57,5 @@ def enlarge_array(
 
 
 def antialias_binary(binary: np.ndarray) -> np.ndarray:
-    """Soften the hard 1-pixel stair-steps of a 0/255 grayscale image with a
-    small Gaussian blur, giving edges intermediate gray values."""
+    """Soften a 0/255 image's stair-stepped edges into gray with a small blur."""
     return cv2.GaussianBlur(binary, (0, 0), ANTIALIAS_SIGMA)

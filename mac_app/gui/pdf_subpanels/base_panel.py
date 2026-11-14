@@ -1,4 +1,4 @@
-"""Shared scaffolding for PDF sub-panels: file pickers, a progress log, threaded run button."""
+"""Shared PDF sub-panel scaffolding: file pickers, progress log, background runs."""
 
 from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import (
@@ -73,11 +73,9 @@ class BasePdfPanel(QWidget):
         if path:
             edit.setText(path)
 
-    def run_in_background(self, fn, *args, on_finished=None, **kwargs) -> None:
+    def run_in_background(self, fn, *args, **kwargs) -> None:
         self.log.clear()
         worker = Worker(fn, *args, **kwargs)
         worker.signals.progress.connect(self.log.appendPlainText)
         worker.signals.error.connect(lambda msg: self.log.appendPlainText(f"ERROR: {msg}"))
-        if on_finished:
-            worker.signals.finished.connect(on_finished)
         self._pool.start(worker)

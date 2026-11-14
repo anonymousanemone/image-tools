@@ -1,8 +1,4 @@
-"""Convert a PDF's pages to JPEGs, ported from pdf_to_images.py.
-
-Added optional output_dir param (original hardcoded it inside the function).
-Requires Poppler (brew install poppler) for pdf2image.
-"""
+"""Convert a PDF's pages to JPEGs (port of pdf_to_images.py; needs Poppler)."""
 
 import os
 from typing import Callable, Optional
@@ -14,7 +10,6 @@ def pdf_to_images(
     pdf_path: str,
     dpi: int = 300,
     jpeg_quality: int = 95,
-    poppler_path: Optional[str] = None,
     output_dir: Optional[str] = None,
     on_progress: Optional[Callable[[str], None]] = None,
 ) -> str:
@@ -40,7 +35,6 @@ def pdf_to_images(
                 dpi=dpi,
                 first_page=page_num,
                 last_page=page_num,
-                poppler_path=poppler_path,
             )
         except Exception as e:
             report(f"Stopping at page {page_num}: {e}")

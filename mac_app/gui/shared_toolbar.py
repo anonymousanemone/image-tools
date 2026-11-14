@@ -1,11 +1,6 @@
-"""Shared utility toolbar embedded in both the Binarizer and Pixel Colors tabs.
+"""Crop / Make Transparent / Download toolbar shared by the Binarizer and Pixel Colors tabs.
 
-Crop Transparent / Make Transparent / Download (PNG, JPG, or SVG) — each acts
-on the owning tab's ImageState. Download as SVG offers two variants: the
-"wrapper" (unchanged: current raster embedded in an SVG <image>, no real
-vector data) and the "vector" one (only offered when a `vector_state` is
-passed in, i.e. from the Binarizer tab's Vectorize panel: the traced <path>
-plus the raster it was traced from, embedded but hidden).
+The vector SVG download is offered only when a `vector_state` is passed.
 """
 
 from pathlib import Path
@@ -77,8 +72,7 @@ class SharedImageToolbar(QWidget):
         super().__init__(parent)
         self.image_state = image_state
         self.vector_state = vector_state
-        # Optional callable returning a tag (e.g. "WOLF", "processed") appended
-        # to the source file name in the default save name.
+        # Optional callable giving the default save name's tag (e.g. "WOLF").
         self._name_tag = name_tag
 
         layout = QVBoxLayout(self)
@@ -120,8 +114,7 @@ class SharedImageToolbar(QWidget):
         return image
 
     def _default_save_path(self, suffix: str) -> str:
-        """Same location as the source file, named `<name>-<tag><suffix>` when a
-        name tag is configured, else `<name><suffix>`."""
+        """Next to the source file, as `<name>[-<tag>]<suffix>`."""
         source = self.image_state.source_path
         if source:
             path = Path(source)
@@ -166,7 +159,7 @@ class SharedImageToolbar(QWidget):
         if path:
             to_save = image
             if image.mode == "RGBA":
-                # JPEG has no alpha channel — flatten transparency onto white.
+                # JPEG has no alpha: flatten onto white.
                 background = Image.new("RGB", image.size, (255, 255, 255))
                 background.paste(image, mask=image.getchannel("A"))
                 to_save = background

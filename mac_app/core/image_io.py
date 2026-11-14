@@ -1,16 +1,6 @@
-"""Robust "open any image" for the GUI's Open Image dialogs.
+"""Open any image the GUI accepts (incl. HEIC/HEIF and PDF pages) as plain RGB/RGBA.
 
-Two problems this fixes:
-
-1. Pillow can't read HEIC/HEIF at all without a plugin, and can't read PDFs
-   as raster images — both raise on Image.open(), which was unhandled in the
-   GUI and looked like the app "freaking out".
-2. pil_to_cv2() (core/utils.py) only knows how to branch on 2-channel-vs-3-vs-4
-   arrays, assuming RGB/RGBA. A palette PNG (mode "P") collapses to a 2D
-   array of palette *indices*, and a CMYK JPEG has 4 channels but isn't
-   RGBA — both get silently misinterpreted as something else, and "LA" mode
-   crashes cv2.cvtColor outright. Normalizing every opened image down to
-   plain RGB/RGBA here means downstream code never sees those modes.
+Normalizing the mode up front keeps pil_to_cv2 from misreading P, LA or CMYK images.
 """
 
 from pathlib import Path
@@ -61,8 +51,7 @@ def load_pdf_page(path, page_index: int = 0, dpi: int = 300) -> Image.Image:
 
 
 def open_image_any(path) -> Image.Image:
-    """Open any supported file — including HEIC/HEIF and the first page of a
-    PDF — normalized to plain RGB/RGBA with EXIF orientation applied."""
+    """Open a supported file (PDF: first page) as RGB/RGBA, EXIF-rotated."""
     path = Path(path)
     if path.suffix.lower() in PDF_EXTENSIONS:
         return load_pdf_page(path)
