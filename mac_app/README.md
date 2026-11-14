@@ -7,7 +7,9 @@ Three tabs:
 - **Pixel Colors & Colormap** — inspect an image's distinct colors, remap exact hex colors, and map an image onto a reference palette via ImageMagick.
 - **PDF Tools** — Flatten (strip text layer), Resize (normalize page width), Side by Side (combine two PDFs), Split (by max size), To Images (rasterize pages).
 
-The shared toolbar (Crop Transparent / Make Transparent / Download as PNG, JPG, or SVG) appears in both the Binarizer and Pixel Colors tabs. Downloads default to the same file name and folder as the opened file, with the extension swapped for the chosen format.
+The shared toolbar (Crop Transparent / Make Transparent / Download as PNG, JPG, or SVG) appears in both the Binarizer and Pixel Colors tabs. Downloads default to the opened file's folder and name. The name gets a tag appended: the binarization method in the Binarizer tab (`scan-WOLF.png`), or `-processed` when the image wasn't binarized (`scan-processed.png`) and always in Pixel Colors.
+
+The Binarizer's **Enlarge** panel scales the image up (simple bicubic, or "Sharp lines": Lanczos + light blur, re-thresholded when the image is already black/white), either on the current image or on the source right before binarizing — the latter gives the cleanest result. **Anti-alias** softens the binarized edges.
 
 "Open Image…" (Binarizer and Pixel Colors tabs) accepts PNG, JPEG, BMP, TIFF, WebP, GIF, HEIC/HEIF, and single-page PDFs (only the first page of a multi-page PDF is loaded — use the PDF Tools tab for the rest). Any input mode (palette, CMYK, grayscale+alpha, etc.) is normalized to plain RGB/RGBA on load.
 
@@ -24,34 +26,36 @@ Both are optional at a feature level — the app detects their absence and disab
 ## Setup (development)
 
 ```bash
+conda activate general
 cd mac_app
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+pip install PySide6 opencv-python doxapy pillow-heif pypdf PyMuPDF pdf2image \
+    pyobjc-framework-Vision pyobjc-framework-Quartz pyobjc-framework-Cocoa pytest pyinstaller
 ```
 
 ## Run
 
 ```bash
-source .venv/bin/activate
+conda activate general
 python main.py
 ```
 
 ## Test
 
 ```bash
-source .venv/bin/activate
+conda activate general
 pytest
 ```
 
 ## Build the .app
 
 ```bash
-source .venv/bin/activate
+conda activate general
 pyinstaller packaging/pyinstaller.spec --distpath dist --workpath build --noconfirm
 xattr -cr "dist/Image Tools.app"   # clears extended attrs that otherwise break codesign
 codesign -s - --force --deep "dist/Image Tools.app"   # ad-hoc sign, single-machine use
-open "dist/Image Tools.app"
+ditto "dist/Image Tools.app" "build/Image Tools.app"   # keep a copy of the app in build/ (gitignored)
+rm -rf dist   # optional: dist/ is disposable once the copy is in build/
+open "build/Image Tools.app"
 ```
 
 The `xattr -cr` step matters: PyInstaller's own ad-hoc codesign step can fail with

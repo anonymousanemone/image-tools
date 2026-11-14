@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QToolButton,
     QVBoxLayout,
@@ -66,10 +67,19 @@ class ThresholdDialog(QDialog):
 
 
 class SharedImageToolbar(QWidget):
-    def __init__(self, image_state: ImageState, vector_state: VectorState | None = None, parent=None):
+    def __init__(
+        self,
+        image_state: ImageState,
+        vector_state: VectorState | None = None,
+        parent=None,
+        name_tag=None,
+    ):
         super().__init__(parent)
         self.image_state = image_state
         self.vector_state = vector_state
+        # Optional callable returning a tag (e.g. "WOLF", "processed") appended
+        # to the source file name in the default save name.
+        self._name_tag = name_tag
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -88,6 +98,9 @@ class SharedImageToolbar(QWidget):
         bottom_row = QHBoxLayout()
         download_btn = QToolButton()
         download_btn.setText("Download ▾")
+        download_btn.setMinimumHeight(44)
+        download_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        download_btn.setStyleSheet("font-size: 15px; font-weight: bold;")
         menu = QMenu(download_btn)
         menu.addAction("Download as PNG", self._download_png)
         menu.addAction("Download as JPG", self._download_jpg)
@@ -97,7 +110,6 @@ class SharedImageToolbar(QWidget):
         download_btn.setMenu(menu)
         download_btn.setPopupMode(QToolButton.InstantPopup)
         bottom_row.addWidget(download_btn)
-        bottom_row.addStretch()
         layout.addLayout(bottom_row)
 
     def _require_image(self):
@@ -108,10 +120,13 @@ class SharedImageToolbar(QWidget):
         return image
 
     def _default_save_path(self, suffix: str) -> str:
-        """Same name/location as the source file, with the given extension."""
+        """Same location as the source file, named `<name>-<tag><suffix>` when a
+        name tag is configured, else `<name><suffix>`."""
         source = self.image_state.source_path
         if source:
-            return str(Path(source).with_suffix(suffix))
+            path = Path(source)
+            tag = f"-{self._name_tag()}" if self._name_tag else ""
+            return str(path.with_name(f"{path.stem}{tag}{suffix}"))
         return f"output{suffix}"
 
     def _crop_transparent(self) -> None:

@@ -6,6 +6,7 @@ dropdown discards any filters applied since the last binarize, since a new
 algorithm choice means starting over from the source image.
 """
 
+import numpy as np
 from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.binarize import ALGORITHMS, binarize_array, render_algorithm_grid, threshold_array
+from core.enlarge import enlarge_array
 from core.filters import FILTERS
 from core.segment import remove_background, vision_available
 from core.utils import cv2_to_pil, pil_to_cv2, svg_to_qpixmap
@@ -37,6 +39,8 @@ from .image_preview import ImagePreviewWidget
 from .image_state import ImageState, VectorState
 from .shared_toolbar import SharedImageToolbar
 
+ENLARGE_SIMPLE = "Simple (bicubic)"
+ENLARGE_SHARP = "Sharp lines"
 COMPARE_ALL = "Compare All"
 THRESHOLD = "THRESHOLD"
 
@@ -47,6 +51,7 @@ class BinarizerTab(QWidget):
         self.image_state = ImageState()
         self.vector_state = VectorState()
         self._is_binarized = False
+        self._binarize_method: str | None = None  # algorithm behind the current result, for the save-as name
         self.image_state.image_changed.connect(self._on_raster_changed)
 
         root = QHBoxLayout(self)
@@ -93,14 +98,49 @@ class BinarizerTab(QWidget):
         self.thicken_check = QCheckBox("Thicken lines (erode)")
         bin_layout.addWidget(self.thicken_check)
 
-        self.transparent_check = QCheckBox("Transparent background (white → alpha 0)")
+        self.transparent_check = QCheckBox("Transparent background")
         bin_layout.addWidget(self.transparent_check)
+
+        self.antialias_check = QCheckBox("Anti-alias")
+        bin_layout.addWidget(self.antialias_check)
 
         binarize_btn = QPushButton("Binarize")
         binarize_btn.clicked.connect(self._binarize)
         bin_layout.addWidget(binarize_btn)
 
         controls.addWidget(bin_group)
+
+        # Enlarge — works on the current image (undoable), or, with the
+        # checkbox, on the source right before binarizing so the algorithm
+        # runs on the larger image.
+        enlarge_group = QGroupBox("Enlarge")
+        enlarge_layout = QVBoxLayout(enlarge_group)
+        enlarge_layout.setSpacing(4)
+
+        factor_row = QHBoxLayout()
+        factor_row.addWidget(QLabel("Factor:"))
+        self.enlarge_factor_spin = QDoubleSpinBox()
+        self.enlarge_factor_spin.setRange(1.0, 8.0)
+        self.enlarge_factor_spin.setSingleStep(0.5)
+        self.enlarge_factor_spin.setDecimals(1)
+        self.enlarge_factor_spin.setValue(2.0)
+        self.enlarge_factor_spin.setSuffix("×")
+        factor_row.addWidget(self.enlarge_factor_spin)
+        enlarge_layout.addLayout(factor_row)
+
+        self.enlarge_method_combo = QComboBox()
+        self.enlarge_method_combo.addItems([ENLARGE_SIMPLE, ENLARGE_SHARP])
+        self.enlarge_method_combo.setCurrentText(ENLARGE_SHARP)
+        enlarge_layout.addWidget(self.enlarge_method_combo)
+
+        self.enlarge_before_check = QCheckBox("Enlarge before binarizing")
+        enlarge_layout.addWidget(self.enlarge_before_check)
+
+        enlarge_btn = QPushButton("Enlarge Image")
+        enlarge_btn.clicked.connect(self._enlarge_current)
+        enlarge_layout.addWidget(enlarge_btn)
+
+        controls.addWidget(enlarge_group)
 
         # Changing the algorithm cancels any filters applied on top of the
         # previous result — connected after initial setup so it doesn't fire
@@ -199,7 +239,7 @@ class BinarizerTab(QWidget):
         self.vec_invert_check = QCheckBox("Invert image")
         vec_layout.addWidget(self.vec_invert_check)
 
-        self.vec_pad_check = QCheckBox("Pad background border (avoid edge clipping)")
+        self.vec_pad_check = QCheckBox("Pad background border")
         vec_layout.addWidget(self.vec_pad_check)
 
         vectorize_btn = QPushButton("Vectorize")
@@ -223,7 +263,9 @@ class BinarizerTab(QWidget):
         undo_btn.clicked.connect(self.image_state.undo)
         controls.addWidget(undo_btn)
 
-        self.toolbar = SharedImageToolbar(self.image_state, vector_state=self.vector_state)
+        self.toolbar = SharedImageToolbar(
+            self.image_state, vector_state=self.vector_state, name_tag=self._save_name_tag
+        )
         controls.addWidget(self.toolbar)
 
         controls.addStretch()
@@ -238,7 +280,7 @@ class BinarizerTab(QWidget):
         splitter.addWidget(self.preview)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([300, 900])
+        splitter.setSizes([320, 900])
 
         root.addWidget(splitter)
 
@@ -247,6 +289,7 @@ class BinarizerTab(QWidget):
         if result:
             image, path = result
             self._is_binarized = False
+            self._binarize_method = None
             self.image_state.load(image, source_path=path)
 
     def _require_original(self):
@@ -266,14 +309,41 @@ class BinarizerTab(QWidget):
             return
         self._run_binarize(original, algo)
 
+    def _save_name_tag(self) -> str:
+        return self._binarize_method if self._is_binarized and self._binarize_method else "processed"
+
+    def _enlarge_current(self) -> None:
+        image = self.image_state.current_image
+        if image is None:
+            QMessageBox.warning(self, "No image", "Open an image first.")
+            return
+        factor = self.enlarge_factor_spin.value()
+        if factor == 1:
+            return
+        arr = pil_to_cv2(image)
+        # A pure 0/255 image (e.g. a binarize result, not an anti-aliased one)
+        # is re-thresholded after enlarging so it stays crisp black/white.
+        binary = bool(np.isin(arr, (0, 255)).all())
+        result = enlarge_array(
+            arr, factor, sharp=self.enlarge_method_combo.currentText() == ENLARGE_SHARP, binary=binary
+        )
+        self.image_state.push(cv2_to_pil(result))
+
     def _run_binarize(self, original: Image.Image, algo: str) -> None:
         cv_img = pil_to_cv2(original)
+        if self.enlarge_before_check.isChecked():
+            cv_img = enlarge_array(
+                cv_img,
+                self.enlarge_factor_spin.value(),
+                sharp=self.enlarge_method_combo.currentText() == ENLARGE_SHARP,
+            )
         if algo == THRESHOLD:
             result = threshold_array(
                 cv_img,
                 thresh=self.threshold_slider.value(),
                 thicken_lines=self.thicken_check.isChecked(),
                 transparent=self.transparent_check.isChecked(),
+                antialias=self.antialias_check.isChecked(),
             )
         else:
             result = binarize_array(
@@ -281,12 +351,14 @@ class BinarizerTab(QWidget):
                 func=algo,
                 thicken_lines=self.thicken_check.isChecked(),
                 transparent=self.transparent_check.isChecked(),
+                antialias=self.antialias_check.isChecked(),
             )
         # Binarize always starts from the original image — discard any
         # filters applied since, then apply the fresh result.
         self.image_state.reset_to_original()
         self.image_state.push(cv2_to_pil(result))
         self._is_binarized = True
+        self._binarize_method = algo
 
     def _compare_all(self, original: Image.Image) -> None:
         """Show all 12 algorithms tiled in one labeled grid, directly in the
@@ -302,6 +374,7 @@ class BinarizerTab(QWidget):
         if self.image_state.original_image is not None:
             self.image_state.reset_to_original()
             self._is_binarized = False
+            self._binarize_method = None
 
     def _remove_background(self) -> None:
         image = self.image_state.current_image

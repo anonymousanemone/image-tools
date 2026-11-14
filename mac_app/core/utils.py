@@ -52,7 +52,11 @@ def pil_to_qpixmap(image: Image.Image) -> QPixmap:
         image = image.convert("RGBA")
     data = image.tobytes("raw", image.mode)
     fmt = QImage.Format_RGBA8888 if image.mode == "RGBA" else QImage.Format_RGB888
-    qimage = QImage(data, image.width, image.height, fmt)
+    # Pass bytesPerLine explicitly: QImage otherwise assumes each row is padded
+    # to a 4-byte boundary, which raw RGB888 data (3 bytes/px) isn't unless the
+    # width is a multiple of 4 — rows then shear into diagonal ghost copies.
+    bytes_per_line = image.width * (4 if image.mode == "RGBA" else 3)
+    qimage = QImage(data, image.width, image.height, bytes_per_line, fmt)
     return QPixmap.fromImage(qimage.copy())
 
 

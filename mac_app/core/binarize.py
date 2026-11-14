@@ -13,6 +13,8 @@ import cv2
 import doxapy
 import numpy as np
 
+from .enlarge import antialias_binary
+
 ALGORITHMS = [
     "OTSU", "BERNSEN", "NIBLACK", "SAUVOLA", "WOLF", "GATOS",
     "NICK", "SU", "TRSINGH", "BATAINEH", "ISAUVOLA", "WAN",
@@ -44,16 +46,23 @@ def _run_algorithm(gray_img: np.ndarray, func: str) -> np.ndarray:
     return binary_image
 
 
-def _postprocess(binary_image: np.ndarray, thicken_lines: bool, transparent: bool) -> np.ndarray:
+def _postprocess(
+    binary_image: np.ndarray, thicken_lines: bool, transparent: bool, antialias: bool = False
+) -> np.ndarray:
     if thicken_lines:
         kernel = np.ones((3, 3), np.uint8)
         binary_image = cv2.erode(binary_image, kernel, iterations=1)
+
+    if antialias:
+        # Before the transparent branch so soft edges become partial alpha.
+        binary_image = antialias_binary(binary_image)
 
     if transparent:
         h, w = binary_image.shape
         output = np.zeros((h, w, 4), dtype=np.uint8)
         output[..., 0:3] = 0
-        output[..., 3] = np.where(binary_image == 255, 0, 255)
+        # 255 - gray: identical to the 0/255 mapping, but keeps anti-aliased edges as partial alpha.
+        output[..., 3] = 255 - binary_image
         return output
 
     return binary_image
@@ -115,6 +124,7 @@ def binarize_array(
     func: str = "WOLF",
     thicken_lines: bool = False,
     transparent: bool = False,
+    antialias: bool = False,
 ) -> np.ndarray:
     """Binarize an in-memory image (BGR/BGRA/grayscale, OpenCV convention).
 
@@ -123,7 +133,7 @@ def binarize_array(
     """
     gray_img = flatten_alpha_to_white(img)
     binary_image = _run_algorithm(gray_img, func)
-    return _postprocess(binary_image, thicken_lines, transparent)
+    return _postprocess(binary_image, thicken_lines, transparent, antialias)
 
 
 def threshold_array(
@@ -131,6 +141,7 @@ def threshold_array(
     thresh: int = 127,
     thicken_lines: bool = False,
     transparent: bool = False,
+    antialias: bool = False,
 ) -> np.ndarray:
     """Plain global thresholding (cv2.threshold, THRESH_BINARY) at a fixed value.
 
@@ -140,7 +151,7 @@ def threshold_array(
     """
     gray_img = flatten_alpha_to_white(img)
     _, binary_image = cv2.threshold(gray_img, thresh, 255, cv2.THRESH_BINARY)
-    return _postprocess(binary_image, thicken_lines, transparent)
+    return _postprocess(binary_image, thicken_lines, transparent, antialias)
 
 
 def binarize_file(

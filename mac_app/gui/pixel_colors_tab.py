@@ -104,7 +104,7 @@ class PixelColorsTab(QWidget):
 
         controls.addWidget(colormap_group)
 
-        self.toolbar = SharedImageToolbar(self.image_state)
+        self.toolbar = SharedImageToolbar(self.image_state, name_tag=lambda: "processed")
         controls.addWidget(self.toolbar)
 
         controls.addStretch()
