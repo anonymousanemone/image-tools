@@ -24,6 +24,23 @@ def test_normalize_pdf_width_matches_reference_page(two_page_pdf, tmp_path):
     assert len(widths) == 1
 
 
+def test_normalize_pdf_width_scales_pages_with_content(tmp_path):
+    import pymupdf
+
+    mixed = tmp_path / "mixed.pdf"
+    doc = pymupdf.open()
+    for width in (200, 400):
+        page = doc.new_page(width=width, height=300)
+        page.insert_text((20, 50), "text")
+    doc.save(str(mixed))
+    doc.close()
+
+    output = str(tmp_path / "resized.pdf")
+    normalize_pdf_width(str(mixed), output_path=output, reference_page_index=0)
+    sizes = [(float(p.mediabox.width), float(p.mediabox.height)) for p in PdfReader(output).pages]
+    assert sizes == [(200.0, 300.0), (200.0, 150.0)]
+
+
 def test_combine_pdfs_side_by_side_sums_widths(two_page_pdf, tmp_path):
     output = str(tmp_path / "combined.pdf")
     combine_pdfs_side_by_side(two_page_pdf, two_page_pdf, output)

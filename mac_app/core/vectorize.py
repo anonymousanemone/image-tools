@@ -64,9 +64,16 @@ def trace_image(
         proc = ImageOps.invert(proc)
 
     with tempfile.TemporaryDirectory() as tmp:
-        src_path = Path(tmp) / "source.png"
+        # Open an SVG wrapping the bitmap at 1:1, not the PNG itself: opening a
+        # PNG can pop Inkscape's modal "bitmap image import" dialog.
+        src_path = Path(tmp) / "source.svg"
         svg_path = Path(tmp) / "traced.svg"
-        proc.save(src_path)
+        src_path.write_text(
+            f'<svg xmlns="{SVG_NS}" width="{proc.width}" height="{proc.height}" '
+            f'viewBox="0 0 {proc.width} {proc.height}">'
+            f'<image width="{proc.width}" height="{proc.height}" href="{image_to_data_uri(proc)}"/>'
+            f"</svg>"
+        )
 
         actions = (
             f"select-all;"

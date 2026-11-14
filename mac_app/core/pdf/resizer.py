@@ -24,19 +24,18 @@ def normalize_pdf_width(
         output_path = f"{base}-resized{ext}"
 
     reader = PdfReader(input_path)
-    writer = PdfWriter()
 
     if reference_page_index < 0 or reference_page_index >= len(reader.pages):
         raise ValueError("Reference page index is out of range.")
 
-    target_width = reader.pages[reference_page_index].mediabox.width
+    # pypdf 7 only scales pages already attached to a writer.
+    writer = PdfWriter(clone_from=reader)
+    target_width = writer.pages[reference_page_index].mediabox.width
 
-    for page in reader.pages:
+    for page in writer.pages:
         current_width = page.mediabox.width
         if current_width != target_width:
-            scale_factor = target_width / current_width
-            page.scale_by(scale_factor)
-        writer.add_page(page)
+            page.scale_by(target_width / current_width)
 
     with open(output_path, "wb") as f:
         writer.write(f)

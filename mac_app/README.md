@@ -2,6 +2,8 @@
 
 A consolidated desktop app for document binarization, pixel-color remapping/colormapping, and PDF utilities. Built with Python + PySide6, packaged as a native `.app` with PyInstaller.
 
+Co-authored with Claude Opus 5.5.
+
 Three tabs:
 - **Binarizer** — 12 classical/local-adaptive binarization algorithms (doxapy), one-button macOS Vision background removal, a filter toolbox (bilateral, gaussian, median, erode, dilate, morph open/close, find contour), and the shared image toolbar.
 - **Pixel Colors & Colormap** — inspect an image's distinct colors, remap exact hex colors, and map an image onto a reference palette via ImageMagick.

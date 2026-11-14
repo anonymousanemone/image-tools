@@ -77,5 +77,10 @@ class BasePdfPanel(QWidget):
         self.log.clear()
         worker = Worker(fn, *args, **kwargs)
         worker.signals.progress.connect(self.log.appendPlainText)
-        worker.signals.error.connect(lambda msg: self.log.appendPlainText(f"ERROR: {msg}"))
+        # A bound method, not a lambda: a lambda's queued call is dropped once the
+        # finished worker's signals object is destroyed.
+        worker.signals.error.connect(self._log_error)
         self._pool.start(worker)
+
+    def _log_error(self, msg: str) -> None:
+        self.log.appendPlainText(f"ERROR: {msg}")
