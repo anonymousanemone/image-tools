@@ -19,18 +19,14 @@ The Binarizer's **Enlarge** panel scales the image up (simple bicubic, or "Sharp
 
 - macOS 13+ (Ventura or later) — required for the Vision-based background removal.
 - Python 3.12 (doxapy ships a prebuilt wheel for this version; other versions may require a local compile).
-- [Homebrew](https://brew.sh) for two optional system dependencies:
-  - `brew install imagemagick` — needed for the Colormap section of the Pixel Colors tab (ImageMagick 7+, the unified `magick` CLI).
-  - `brew install poppler` — needed for the PDF Tools "To Images" panel (`pdf2image` wraps Poppler's `pdftoppm`).
-
-Both are optional at a feature level — the app detects their absence and disables/warns on the relevant controls (see Help → Check Dependencies).
+- ImageMagick 7+ (optional, `brew install imagemagick` via [Homebrew](https://brew.sh)). The Colormap section of the Pixel Colors tab calls its `magick` CLI. Without it, the app disables the Colormap controls (see Help → Check Dependencies).
 
 ## Setup (development)
 
 ```bash
 conda activate general
 cd mac_app
-pip install PySide6 opencv-python doxapy pillow-heif pypdf PyMuPDF pdf2image \
+pip install PySide6 opencv-python doxapy pillow-heif pypdf PyMuPDF \
     pyobjc-framework-Vision pyobjc-framework-Quartz pyobjc-framework-Cocoa pytest pyinstaller
 ```
 
@@ -74,11 +70,10 @@ notarization, which is out of scope for this build.
 
 ### Known packaging pitfalls
 
-- `magick` and `pdftoppm` are **not bundled** — they're separate Homebrew
-  binaries invoked via `subprocess`. A `.app` launched from Finder does not
-  inherit your shell's `PATH`, so lookups fall back to checking
-  `/opt/homebrew/bin` and `/usr/local/bin` directly (see `core/utils.py`'s
-  `which()`).
+- `magick` is **not bundled** — it's a separate Homebrew binary invoked via
+  `subprocess`. A `.app` launched from Finder does not inherit your shell's
+  `PATH`, so lookups fall back to checking `/opt/homebrew/bin` and
+  `/usr/local/bin` directly (see `core/utils.py`'s `which()`).
 - If you add new dependencies with dynamic imports (like doxapy's
   `getattr`-based algorithm dispatch, or Vision/Quartz's lazy imports inside
   `segment_vision()`), add them to `hiddenimports` in

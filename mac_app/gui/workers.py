@@ -6,6 +6,7 @@ from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 class WorkerSignals(QObject):
     progress = Signal(str)
     error = Signal(str)
+    result = Signal(object)
 
 
 class Worker(QRunnable):
@@ -20,6 +21,8 @@ class Worker(QRunnable):
     @Slot()
     def run(self) -> None:
         try:
-            self.fn(*self.args, **self.kwargs)
+            result = self.fn(*self.args, **self.kwargs)
         except Exception as e:
             self.signals.error.emit(str(e))
+        else:
+            self.signals.result.emit(result)

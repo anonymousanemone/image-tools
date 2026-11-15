@@ -4,7 +4,6 @@ from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout
 
 from core.colormap_magick import magick_available
 from core.segment import vision_available
-from core.utils import which
 
 
 class DependencyDialog(QDialog):
@@ -16,7 +15,6 @@ class DependencyDialog(QDialog):
         checks = [
             ("macOS Vision (Remove Background)", vision_available(), None),
             ("ImageMagick `magick` CLI (Colormap)", magick_available(), "brew install imagemagick"),
-            ("Poppler `pdftoppm` (PDF to Images)", which("pdftoppm") is not None, "brew install poppler"),
         ]
 
         for name, ok, fix in checks:

@@ -5,7 +5,8 @@ import os
 from typing import Callable, Optional
 
 import pymupdf as fitz
-from PIL import Image
+
+from core.image_io import PYMUPDF_LOCK, render_pdf_pages
 
 
 def strip_text_layer(
@@ -21,30 +22,24 @@ def strip_text_layer(
         if on_progress:
             on_progress(msg)
 
-    src_doc = fitz.open(input_pdf)
-    out_doc = fitz.open()
+    with PYMUPDF_LOCK:
+        out_doc = fitz.open()
 
-    zoom = dpi / 72  # PDF default is 72 DPI
-    matrix = fitz.Matrix(zoom, zoom)
+    report("Stripping text layer...")
 
-    report(f"Stripping text layer from {len(src_doc)} pages...")
+    try:
+        for page_num, img in enumerate(render_pdf_pages(input_pdf, dpi / 72), start=1):
+            img_bytes = io.BytesIO()
+            img.save(img_bytes, format="PNG")
+            with PYMUPDF_LOCK:
+                pdf_page = out_doc.new_page(width=img.width, height=img.height)
+                pdf_page.insert_image(pdf_page.rect, stream=img_bytes.getvalue())
+            report(f"Processed page {page_num}")
 
-    for page_num, page in enumerate(src_doc, start=1):
-        pix = page.get_pixmap(matrix=matrix, alpha=False)
-        img = Image.open(io.BytesIO(pix.tobytes("png")))
-
-        pdf_page = out_doc.new_page(width=img.width, height=img.height)
-
-        img_bytes = io.BytesIO()
-        img.save(img_bytes, format="PNG")
-        img_bytes.seek(0)
-
-        pdf_page.insert_image(pdf_page.rect, stream=img_bytes.read())
-
-        report(f"Processed page {page_num}")
-
-    out_doc.save(output_pdf)
-    out_doc.close()
-    src_doc.close()
+        with PYMUPDF_LOCK:
+            out_doc.save(output_pdf)
+    finally:
+        with PYMUPDF_LOCK:
+            out_doc.close()
 
     report(f"Done. Output saved to: {output_pdf}")

@@ -5,13 +5,11 @@ since they receive those events before this widget does.
 """
 
 import subprocess
-import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -21,17 +19,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.utils import pil_to_qpixmap
+from core.utils import pil_to_qpixmap, session_temp_dir
 from core.vectorize import build_svg, find_inkscape
 
 from .image_state import ImageState, VectorState
-
-ZOOM_STEP = 1.25
-ZOOM_MIN = 0.1
-ZOOM_MAX = 8.0
+from .zoom import ZoomMixin
 
 
-class ImagePreviewWidget(QWidget):
+class ImagePreviewWidget(ZoomMixin, QWidget):
     def __init__(
         self,
         image_state: ImageState,
@@ -49,30 +44,13 @@ class ImagePreviewWidget(QWidget):
 
         self._pixmap: QPixmap | None = None
         self._override_pixmap: QPixmap | None = None
-        self._zoom = 1.0
-        self._fit_to_window = True
         self._panning = False
         self._pan_start_global = None
         self._pan_start_scroll = (0, 0)
 
-        toolbar = QHBoxLayout()
-        zoom_out_btn = QPushButton("−")
-        zoom_out_btn.setFixedWidth(28)
-        zoom_out_btn.clicked.connect(self.zoom_out)
-        zoom_in_btn = QPushButton("+")
-        zoom_in_btn.setFixedWidth(28)
-        zoom_in_btn.clicked.connect(self.zoom_in)
-        fit_btn = QPushButton("Fit")
-        fit_btn.clicked.connect(self.zoom_fit)
-        self._zoom_label = QLabel("100%")
-        self._zoom_label.setFixedWidth(48)
-        self._zoom_label.setAlignment(Qt.AlignCenter)
+        toolbar = self._init_zoom()
         preview_btn = QPushButton("See in Preview")
         preview_btn.clicked.connect(self.open_in_native_preview)
-        toolbar.addWidget(zoom_out_btn)
-        toolbar.addWidget(self._zoom_label)
-        toolbar.addWidget(zoom_in_btn)
-        toolbar.addWidget(fit_btn)
         toolbar.addWidget(preview_btn)
         toolbar.addStretch()
 
@@ -81,7 +59,7 @@ class ImagePreviewWidget(QWidget):
         self._label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
 
         self._scroll = QScrollArea()
-        # _rescale() sizes the label itself so a zoomed image can exceed the
+        # _apply_zoom() sizes the label itself so a zoomed image can exceed the
         # viewport and pan; widgetResizable would shrink it back.
         self._scroll.setWidgetResizable(False)
         self._scroll.setAlignment(Qt.AlignCenter)
@@ -108,15 +86,15 @@ class ImagePreviewWidget(QWidget):
             return
         self._pixmap = pil_to_qpixmap(image)
         self._label.setText("")
-        self._rescale()
+        self._apply_zoom()
 
     def show_override(self, pixmap: QPixmap) -> None:
         """Show `pixmap` (the Vectorize preview) instead of the image until the next refresh()."""
         self._override_pixmap = pixmap
         self._label.setText("")
-        self._rescale()
+        self._apply_zoom()
 
-    def _rescale(self) -> None:
+    def _apply_zoom(self) -> None:
         pixmap = self._override_pixmap if self._override_pixmap is not None else self._pixmap
         if pixmap is None:
             return
@@ -133,40 +111,15 @@ class ImagePreviewWidget(QWidget):
             scaled = pixmap.scaled(w, h, Qt.KeepAspectRatio, self._transform_mode)
         self._label.setPixmap(scaled)
         self._label.resize(scaled.size())
-        self._zoom_label.setText(f"{round(self._zoom * 100)}%")
+        self._show_zoom()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         if self._fit_to_window:
-            self._rescale()
-
-    def zoom_in(self) -> None:
-        self._fit_to_window = False
-        self._zoom = min(self._zoom * ZOOM_STEP, ZOOM_MAX)
-        self._rescale()
-
-    def zoom_out(self) -> None:
-        self._fit_to_window = False
-        self._zoom = max(self._zoom / ZOOM_STEP, ZOOM_MIN)
-        self._rescale()
-
-    def zoom_fit(self) -> None:
-        self._fit_to_window = True
-        self._rescale()
+            self._apply_zoom()
 
     def eventFilter(self, obj, event) -> bool:
-        # Trackpad pinch (a macOS native gesture, no grabGesture() needed).
-        if event.type() == QEvent.NativeGesture and event.gestureType() == Qt.ZoomNativeGesture:
-            self._fit_to_window = False
-            self._zoom = max(ZOOM_MIN, min(ZOOM_MAX, self._zoom * (1.0 + event.value())))
-            self._rescale()
-            return True
-        # Ctrl+wheel zooms; plain scrolling still pans.
-        if event.type() == QEvent.Wheel and event.modifiers() & Qt.ControlModifier:
-            if event.angleDelta().y() > 0:
-                self.zoom_in()
-            else:
-                self.zoom_out()
+        if self._zoom_event(event):
             return True
         # Drag to pan (QScrollArea has none built in).
         if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
@@ -193,7 +146,7 @@ class ImagePreviewWidget(QWidget):
     def _preview_tmp_path(self, suffix: str) -> Path:
         # One reused file per suffix; it must outlive this call for Preview/Inkscape.
         if self._preview_tmp_dir is None:
-            self._preview_tmp_dir = Path(tempfile.mkdtemp(prefix="image_tools_preview_"))
+            self._preview_tmp_dir = Path(session_temp_dir())
         return self._preview_tmp_dir / f"preview{suffix}"
 
     def open_in_native_preview(self) -> None:

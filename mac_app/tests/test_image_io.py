@@ -1,7 +1,15 @@
 import pymupdf
 from PIL import Image
 
-from core.image_io import load_pdf_page, normalize_mode, open_image_any, pdf_page_count
+from core.image_io import (
+    load_pdf_page,
+    normalize_mode,
+    open_image_any,
+    page_sizes,
+    pdf_page_count,
+    preview_scale,
+    render_pdf_pages,
+)
 
 
 def test_normalize_mode_converts_palette_to_rgba():
@@ -76,3 +84,22 @@ def test_load_pdf_page_out_of_range_raises(tmp_path):
         assert False, "expected ValueError for out-of-range page"
     except ValueError:
         pass
+
+
+def test_preview_scale_keeps_relative_page_sizes(make_pdf):
+    path = make_pdf("mixed", [300, 600])
+
+    scale, reduced = preview_scale(page_sizes(path), max_side=1000)
+    small, large = render_pdf_pages(path, scale)
+    assert not reduced
+    assert abs(large.width - 1000) <= 1
+    assert abs(large.width - 2 * small.width) <= 1
+
+
+def test_preview_scale_respects_memory_budget(make_pdf):
+    path = make_pdf("mixed", [300, 600])
+
+    scale, reduced = preview_scale(page_sizes(path), budget_bytes=30000)
+    images = render_pdf_pages(path, scale)
+    assert reduced
+    assert sum(4 * image.width * image.height for image in images) <= 30000

@@ -1,6 +1,8 @@
 """Shared conversion helpers and external-tool availability checks."""
 
+import atexit
 import shutil
+import tempfile
 from pathlib import Path
 
 import cv2
@@ -25,6 +27,18 @@ def which(binary_name: str) -> str | None:
     return None
 
 
+_session_dir: str | None = None
+
+
+def session_temp_dir() -> str:
+    """A new folder inside this session's temp folder, which is deleted when the app exits."""
+    global _session_dir
+    if _session_dir is None:
+        _session_dir = tempfile.mkdtemp(prefix="image_tools_")
+        atexit.register(shutil.rmtree, _session_dir, True)
+    return tempfile.mkdtemp(dir=_session_dir)
+
+
 def pil_to_cv2(image: Image.Image) -> np.ndarray:
     """RGBA/RGB PIL Image -> BGR(A) numpy array (OpenCV convention)."""
     arr = np.array(image)
@@ -44,15 +58,19 @@ def cv2_to_pil(arr: np.ndarray) -> Image.Image:
     return Image.fromarray(cv2.cvtColor(arr, cv2.COLOR_BGR2RGB))
 
 
-def pil_to_qpixmap(image: Image.Image) -> QPixmap:
+def pil_to_qimage(image: Image.Image) -> QImage:
+    """Safe off the GUI thread, unlike pil_to_qpixmap."""
     if image.mode not in ("RGBA", "RGB"):
         image = image.convert("RGBA")
     data = image.tobytes("raw", image.mode)
     fmt = QImage.Format_RGBA8888 if image.mode == "RGBA" else QImage.Format_RGB888
     # Explicit bytesPerLine: RGB888 rows aren't 4-byte aligned, and assuming so shears the image.
     bytes_per_line = image.width * (4 if image.mode == "RGBA" else 3)
-    qimage = QImage(data, image.width, image.height, bytes_per_line, fmt)
-    return QPixmap.fromImage(qimage.copy())
+    return QImage(data, image.width, image.height, bytes_per_line, fmt).copy()
+
+
+def pil_to_qpixmap(image: Image.Image) -> QPixmap:
+    return QPixmap.fromImage(pil_to_qimage(image))
 
 
 def svg_to_qpixmap(svg_text: str, width: int, height: int) -> QPixmap:

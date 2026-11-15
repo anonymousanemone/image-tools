@@ -1,6 +1,8 @@
 """Shared pytest fixtures: small synthetic images/PDFs generated on the fly
 (no binary fixture files checked into the repo)."""
 
+import os
+
 import numpy as np
 import pymupdf
 import pytest
@@ -46,3 +48,43 @@ def two_page_pdf(tmp_path):
     doc.save(str(path))
     doc.close()
     return str(path)
+
+
+@pytest.fixture
+def make_pdf(tmp_path):
+    """Build `<name>.pdf` with one page per width (all `height` tall); returns its path."""
+
+    def build(name, widths, height=300, text=False):
+        doc = pymupdf.open()
+        for width in widths:
+            page = doc.new_page(width=width, height=height)
+            if text:
+                page.insert_text((20, 50), "text")
+        path = tmp_path / f"{name}.pdf"
+        doc.save(str(path))
+        doc.close()
+        return str(path)
+
+    return build
+
+
+@pytest.fixture(scope="session")
+def qapp():
+    """One QApplication for every test that needs Qt (widgets require it, not just QGuiApplication)."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture
+def qwidgets(qapp):
+    """For tests that build widgets. Destroys them while the QApplication is still alive, because widgets left until interpreter exit make Qt abort."""
+    from PySide6.QtCore import QCoreApplication, QEvent, QThreadPool
+    from PySide6.QtWidgets import QApplication
+
+    yield qapp
+    QThreadPool.globalInstance().waitForDone()
+    for widget in QApplication.topLevelWidgets():
+        widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)

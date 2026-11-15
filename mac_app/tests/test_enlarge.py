@@ -42,10 +42,7 @@ def test_antialias_with_transparent_gives_partial_alpha(sample_doc_image):
     assert len(np.unique(out[:, :, 3])) > 2
 
 
-def test_pil_to_qpixmap_rgb_width_not_multiple_of_four():
-    from PySide6.QtGui import QGuiApplication
-
-    _app = QGuiApplication.instance() or QGuiApplication([])
+def test_pil_to_qpixmap_rgb_width_not_multiple_of_four(qapp):
     # 5 px wide RGB rows are 15 bytes, not 4-byte aligned: the old conversion
     # sheared these into diagonal ghost copies.
     arr = np.zeros((4, 5, 3), np.uint8)

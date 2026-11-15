@@ -12,7 +12,6 @@ dependencies = [
     "pillow-heif>=0.18",
     "pypdf>=4.0",
     "PyMuPDF>=1.24",
-    "pdf2image>=1.17",
     "pyobjc-framework-Vision; sys_platform == 'darwin'",
     "pyobjc-framework-Quartz; sys_platform == 'darwin'",
     "pyobjc-framework-Cocoa; sys_platform == 'darwin'",

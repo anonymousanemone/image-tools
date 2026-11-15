@@ -1,9 +1,9 @@
-"""Convert a PDF's pages to JPEGs (port of pdf_to_images.py; needs Poppler)."""
+"""Convert a PDF's pages to JPEGs (port of pdf_to_images.py)."""
 
 import os
 from typing import Callable, Optional
 
-from pdf2image import convert_from_path
+from core.image_io import render_pdf_pages
 
 
 def pdf_to_images(
@@ -25,35 +25,19 @@ def pdf_to_images(
         output_dir = os.path.join(os.path.dirname(pdf_path), pdf_name)
     os.makedirs(output_dir, exist_ok=True)
 
-    page_num = 1
     report("Starting PDF -> image conversion (OCR optimized)...")
 
-    while True:
-        try:
-            pages = convert_from_path(
-                pdf_path,
-                dpi=dpi,
-                first_page=page_num,
-                last_page=page_num,
-            )
-        except Exception as e:
-            report(f"Stopping at page {page_num}: {e}")
-            break
-
-        if not pages:
-            break
-
+    page_num = 0
+    for page_num, image in enumerate(render_pdf_pages(pdf_path, dpi / 72), start=1):
         image_path = os.path.join(output_dir, f"page_{page_num:04d}.jpeg")
-        pages[0].save(
+        image.save(
             image_path,
             "JPEG",
             quality=jpeg_quality,
             subsampling=0,
             optimize=True,
         )
-
         report(f"Saved page {page_num}")
-        page_num += 1
 
-    report(f"Done. Converted {page_num - 1} pages.")
+    report(f"Done. Converted {page_num} pages.")
     return output_dir

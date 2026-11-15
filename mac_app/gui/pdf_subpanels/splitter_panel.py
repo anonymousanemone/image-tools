@@ -1,29 +1,43 @@
-from PySide6.QtWidgets import QLabel, QPushButton, QSpinBox
+import os
 
-from core.pdf.splitter import split_pdf_by_size
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QSpinBox
 
-from .base_panel import BasePdfPanel
+from core.pdf.splitter import BYTES_IN_MB, part_filename, plan_split, split_pdf_by_size
+
+from .base_panel import BasePdfPanel, PreviewDoc, PreviewRequest
+
+PART_COLORS = [QColor(c) for c in ("#1e88e5", "#e53935", "#43a047", "#fb8c00", "#8e24aa", "#00897b")]
 
 
 class SplitterPanel(BasePdfPanel):
+    RUN_TEXT = "Split PDF"
+    OUTPUT_IS_FOLDER = True
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.input_edit = self.add_file_picker("Input PDF:")
 
-        self.layout_.addWidget(QLabel("Max size per part (MB):"))
         self.size_spin = QSpinBox()
         self.size_spin.setRange(1, 500)
         self.size_spin.setValue(9)
-        self.layout_.addWidget(self.size_spin)
+        self.size_spin.valueChanged.connect(self._on_inputs_changed)
+        self.options_layout.addRow("Max size per part (MB):", self.size_spin)
 
-        run_btn = QPushButton("Split PDF")
-        run_btn.clicked.connect(self._run)
-        self.layout_.addWidget(run_btn)
-        self.layout_.addWidget(self.log)
+    def options(self) -> dict:
+        return {"max_mb": self.size_spin.value()}
 
-    def _run(self) -> None:
-        input_pdf = self.input_edit.text().strip()
-        if not input_pdf:
-            self.log.appendPlainText("ERROR: choose an input PDF first.")
-            return
-        self.run_in_background(split_pdf_by_size, input_pdf, self.size_spin.value())
+    def default_output(self, params: dict) -> str:
+        return os.path.dirname(os.path.abspath(params["input"]))
+
+    def run_job(self, temp_dir: str, params: dict, on_progress) -> list[str]:
+        return split_pdf_by_size(params["input"], params["max_mb"], output_dir=temp_dir, on_progress=on_progress)
+
+    def preview_job(self, request: PreviewRequest) -> PreviewDoc:
+        params = request.params
+        marks, legend = [], []
+        for number, (pages, size) in enumerate(plan_split(params["input"], params["max_mb"]), start=1):
+            color = PART_COLORS[(number - 1) % len(PART_COLORS)]
+            marks.extend((color, f"Part {number}") for _ in pages)
+            over = " (over limit)" if size > params["max_mb"] * BYTES_IN_MB else ""
+            legend.append((color, f"{part_filename(params['input'], number)} — {size / BYTES_IN_MB:.1f} MB{over}"))
+        return PreviewDoc(params["input"], marks, legend)
